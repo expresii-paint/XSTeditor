@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XST Editor — Expresii Stroke File</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='4' width='24' height='24' rx='6' fill='none' stroke='%239aa0ad' stroke-width='1.5'/%3E%3Cline x1='9' y1='9' x2='23' y2='23' stroke='%23ffb454' stroke-width='4' stroke-linecap='round'/%3E%3Cline x1='23' y1='9' x2='9' y2='23' stroke='%235aa9ff' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Cline x1='50' y1='50' x2='130' y2='130' stroke='%23ffb454' stroke-width='22' stroke-linecap='round'/%3E%3Cline x1='130' y1='50' x2='50' y2='130' stroke='%235aa9ff' stroke-width='22' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#1b1d23; --panel:#24272f; --panel2:#2c303a; --line:#3a3f4b;
+    --txt:#e6e8ec; --dim:#9aa0ad; --accent:#5aa9ff; --accent2:#ffb454;
+    --good:#5fd08a; --bad:#ff6b6b; --sel:#33415c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);
+    border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header h1{font-size:14px;margin:0;font-weight:600;color:var(--accent)}
+  header .spacer{flex:1}
+  button,select,input{font:inherit;color:var(--txt)}
+  button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:5px 10px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#06203f;border-color:var(--accent);font-weight:600}
+  button.danger:hover{border-color:var(--bad);color:var(--bad)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .pill{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--dim)}
+  /* recent dropdown */
+  .dropdown{position:relative}
+  .menu{position:absolute;top:calc(100% + 4px);left:0;min-width:280px;max-height:320px;overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;z-index:40;box-shadow:0 8px 28px #000a}
+  .menu .empty{color:var(--dim);padding:10px 12px;font-size:12px}
+  .menu .item{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .menu .item:last-child{border-bottom:none}
+  .menu .item:hover{background:var(--panel2)}
+  .menu .item .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .menu .item .meta{color:var(--dim);font-size:10px}
+  .menu .item .x{color:var(--dim);border:none;background:none;padding:0 4px;font-size:14px;line-height:1}
+  .menu .item .x:hover{color:var(--bad)}
+  main{display:grid;grid-template-columns:minmax(560px,1fr) 300px 340px;height:calc(100% - 45px);min-height:0}
+  .col{min-height:0;overflow:auto;border-right:1px solid var(--line);display:flex;flex-direction:column}
+  .col.collapsed{overflow:visible}
+  .col:last-child{border-right:none}
+  /* collapsible panel header */
+  .panel-head{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line);cursor:pointer;user-select:none;position:sticky;top:0;z-index:3;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+  .panel-head .pt{flex:1}
+  .panel-head .chev{transition:transform .12s;font-size:10px}
+  .col.collapsed{width:30px!important;min-width:30px;flex:0 0 30px}
+  .col.collapsed .panel-body{display:none}
+  .col.collapsed .panel-head{flex-direction:column;height:100%;writing-mode:vertical-rl;padding:8px 4px}
+  .col.collapsed .panel-head .chev{transform:rotate(-90deg)}
+  .panel-body{min-height:0;overflow:auto;flex:1}
+  .col h2{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);
+    margin:0;padding:8px 10px;background:var(--panel);position:sticky;top:0;z-index:2;border-bottom:1px solid var(--line)}
+  .pad{padding:10px}
+  .stroke-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid var(--line);cursor:pointer}
+  .stroke-item:hover{background:var(--panel2)}
+  .stroke-item.sel{background:var(--sel);outline:1px solid var(--accent)}
+  .thumb{width:64px;height:44px;border:1px solid var(--line);border-radius:4px;background:#fff;flex:0 0 auto}
+  .stroke-item .body{flex:1;min-width:0}
+  .stroke-item .lbl{font-weight:600}
+  .stroke-item .meta{color:var(--dim);font-size:10px}
+  .stroke-item .badge{display:inline-block;margin-top:2px;color:var(--accent2);font-size:10px}
+  .stroke-item .acts{display:flex;gap:3px}
+  .stroke-item .acts button{padding:1px 6px;font-size:11px}
+  /* layers panel */
+  .layer-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;margin:5px 0;cursor:pointer;background:var(--panel2)}
+  .layer-item:hover{border-color:var(--accent)}
+  .layer-item.sel{background:var(--sel);outline:1px solid var(--accent)}
+  .layer-item .tw{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+  .layer-item .lbl{font-weight:600}
+  .layer-item .meta{color:var(--dim);font-size:10px;margin-left:auto}
+  .layer-empty{color:var(--dim);font-size:11px;padding:4px 2px}
+  /* preview */
+  #previewWrap{position:relative;background:#fafafa;overflow:hidden;display:flex;flex-direction:column}
+  #previewBar{display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  #previewBar label{color:var(--dim);display:flex;align-items:center;gap:4px}
+  #canvasBox{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto;position:relative}
+  #marquee{position:fixed;border:1px dashed #36c;background:rgba(67,99,216,0.12);pointer-events:none;z-index:50}
+  svg{max-width:100%;max-height:100%}
+  /* forms */
+  .field{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:5px 0}
+  .field label{color:var(--dim)}
+  .field input[type=number]{width:90px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:3px 6px}
+  .field input[type=text]{width:150px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:3px 6px}
+  .field .hint{color:var(--dim);font-size:10px}
+  details{border:1px solid var(--line);border-radius:8px;margin:8px 0;background:var(--panel2)}
+  summary{padding:7px 10px;cursor:pointer;color:var(--accent);font-weight:600}
+  details .body{padding:8px 10px;border-top:1px solid var(--line)}
+  .grad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .grad-cell{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--dim)}
+  .grad-cell input[type=color]{width:100%;height:30px;border:1px solid var(--line);border-radius:5px;background:none;padding:0}
+  textarea{width:100%;background:#161821;color:var(--txt);border:1px solid var(--line);border-radius:6px;
+    padding:8px;font:12px ui-monospace,monospace;resize:vertical}
+  table.frames{border-collapse:collapse;width:100%;font-size:11px}
+  table.frames th,table.frames td{border:1px solid var(--line);padding:2px 4px;text-align:right}
+  table.frames th{position:sticky;top:0;background:var(--panel);color:var(--dim);z-index:1}
+  table.frames td input{width:62px;background:var(--panel2);border:1px solid transparent;border-radius:3px;color:var(--txt);text-align:right;padding:1px 3px}
+  table.frames tr:hover td{background:var(--panel2)}
+  table.frames tr.lift td{opacity:.45}
+  .framesScroll{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+  .toolbar-row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  .msg{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:var(--panel2);
+    border:1px solid var(--accent);border-radius:8px;padding:8px 16px;z-index:50;box-shadow:0 6px 24px #0008}
+  .range{display:flex;align-items:center;gap:6px;color:var(--dim)}
+  .range input[type=range]{flex:1}
+  .legend{color:var(--dim);font-size:11px;padding:4px 10px}
+  .legend .lgnum{padding:0 1px;border-radius:3px}
+  .legend .lgnum:hover{outline:1px solid var(--accent);background:var(--panel2)}
+  /* tree view */
+  .tree{font-size:11px}
+  .tree .node{padding:2px 0}
+  .tree .prelude,.tree .trailing{color:var(--dim)}
+  .tree .stroke-node{margin:3px 0;padding:3px 6px;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+  .tree .stroke-node .head{font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .tree .stroke-node .cfg{color:var(--accent2);font-size:10px;margin-left:18px}
+  .tree .frame-mini{color:var(--dim);font-size:10px;margin-left:18px;max-height:60px;overflow:auto}
+  .tree .tw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+  /* save dialog modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:60}
+  .modal-overlay[hidden]{display:none}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-width:320px;max-width:480px;padding:16px 18px;box-shadow:0 12px 40px #000a}
+  .modal h3{margin:0 0 12px;font-size:14px;color:var(--accent)}
+  .modal .row{display:flex;align-items:center;gap:8px;margin:10px 0}
+  .modal label{color:var(--dim);width:78px;flex:0 0 auto}
+  .modal input[type=text]{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:6px 8px;color:var(--txt)}
+  .modal .path{color:var(--accent2);font-size:11px;word-break:break-all;min-height:14px}
+  .modal .hint{color:var(--dim);font-size:11px}
+  .modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>XST Editor</h1>
+  <button id="openBtn" class="primary">Open .xst</button>
+  <div class="dropdown">
+    <button id="newBtn">New ▾</button>
+    <div id="newMenu" class="menu" hidden>
+      <div class="item" data-act="blank"><span class="nm">Blank document</span></div>
+      <div class="item" data-act="demo"><span class="nm">Load demo strokes</span></div>
+    </div>
+  </div>
+  <div class="dropdown">
+    <button id="recentBtn">Recent ▾</button>
+    <div id="recentMenu" class="menu" hidden></div>
+  </div>
+  <button id="saveBtn">Save (download)</button>
+  <button id="undoBtn" title="Ctrl+Z">Undo</button>
+  <button id="redoBtn" title="Ctrl+Y">Redo</button>
+  <span class="spacer"></span>
+  <span class="pill" id="statPill">no file</span>
+  <input id="fileInput" type="file" accept=".xst,.txt,text/plain" class="hidden" style="display:none">
+</header>
+
+<main>
+  <!-- MAIN: preview (canvas) -->
+  <div class="col" id="previewWrap" style="overflow:hidden;display:flex;flex-direction:column">
+    <div id="previewBar">
+      <button id="zoomFit" title="Zoom to fit">Zoom to fit</button>
+      <span class="range">Zoom <input id="zoom" type="range" min="0.2" max="40" step="0.1" value="1" style="width:120px"> <b id="zoomVal" style="min-width:42px;display:inline-block;text-align:right">1.0×</b></span>
+      <label><input id="flipY" type="checkbox"> Flip Y</label>
+      <label><input id="showFrames" type="checkbox"> Frame dots</label>
+      <label><input id="colorStroke" type="radio" name="cmode" value="stroke" checked> Color by stroke</label>
+      <label><input id="colorInk" type="radio" name="cmode" value="ink"> Ink (pressure)</label>
+      <span class="range" title="Max stroke width at full pressure">Weight <input id="weight" type="range" min="1" max="40" step="1" value="12" style="width:90px"></span>
+    </div>
+    <div id="canvasBox"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg><div id="marquee" hidden></div></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  
+  <!-- MIDDLE: strokes + layers (level-1 command list) -->
+  <div class="col" id="leftCol">
+    <div class="panel-head" data-collapse="leftCol"><span class="pt">Strokes &amp; Layers</span><span class="chev">▸</span></div>
+    <div class="panel-body">
+      <h2>Layers</h2>
+      <div class="pad" style="padding-top:8px">
+        <div id="layerList"></div>
+      </div>
+      <h2>Strokes</h2>
+      <div class="pad" style="padding-top:8px">
+        <div class="toolbar-row">
+          <button id="addStrokeBtn">+ Add stroke</button>
+          <button id="dupStrokeBtn">Duplicate</button>
+        </div>
+      </div>
+      <div id="strokeList"></div>
+    </div>
+  </div>
+
+  
+<!-- FAR RIGHT: Document panel -->
+  <div class="col" id="rightCol">
+    <div class="panel-head" data-collapse="rightCol"><span class="pt">Document</span><span class="chev">▸</span></div>
+    <div class="panel-body">
+    <h2>Document</h2>
+    <div class="pad">
+      <div class="toolbar-row">
+        <button id="modeStruct" class="primary">Structured</button>
+        <button id="modeRaw">Raw text</button>
+      </div>
+      <div id="structPanel">
+        <details open>
+          <summary>Global parameters</summary>
+          <div class="body" id="globalParams"></div>
+        </details>
+        <details>
+          <summary>Gradient (l &times;9)</summary>
+          <div class="body"><div class="grad-grid" id="gradGrid"></div></div>
+        </details>
+        <details>
+          <summary>Command list (tree)</summary>
+          <div class="body" id="docTree"></div>
+        </details>
+        <details>
+          <summary>Selected stroke</summary>
+          <div class="body" id="strokeEditor">
+            <p class="legend" id="strokeEditorEmpty">Select a stroke on the left.</p>
+            <div id="strokeEditorBody" style="display:none">
+              <div class="field"><label>Frames</label><span id="seFrames" class="hint"></span></div>
+              <div class="field"><label>Translate dx,dy</label>
+                <span><input id="tfDx" type="number" step="0.001" value="0" style="width:70px">
+                <input id="tfDy" type="number" step="0.001" value="0" style="width:70px"></span></div>
+              <div class="field"><label>Scale</label><input id="tfScale" type="number" step="0.05" value="1" style="width:90px"></div>
+              <div class="field"><label>Rotate &deg;</label><input id="tfRot" type="number" step="1" value="0" style="width:90px"></div>
+              <div class="field"><label>Flip X / Y</label>
+                <span><input id="tfFlipX" type="checkbox"><input id="tfFlipY" type="checkbox"></span></div>
+              <div class="field"><label>Pressure &times;</label><input id="tfPmul" type="number" step="0.05" value="1" style="width:90px"></div>
+              <div class="field"><label>Pressure +</label><input id="tfPadd" type="number" step="0.01" value="0" style="width:90px"></div>
+              <div class="field"><label>Z (layer) +</label><input id="tfZadd" type="number" step="0.001" value="0" style="width:90px"></div>
+              <div class="toolbar-row">
+                <button id="applyTf" class="primary">Apply transform</button>
+                <button id="resetTf">Reset</button>
+              </div>
+              <div class="toolbar-row">
+                <button id="insFrame">+ Frame after cursor</button>
+                <button id="delFrame" class="danger">Delete cursor frame</button>
+              </div>
+              <div class="framesScroll">
+                <table class="frames" id="frameTable"></table>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+      <div id="rawPanel" style="display:none">
+        <p class="legend">Full-fidelity text editing — any command. Click <b>Apply raw</b> to re-parse into the command tree. Unknown/comment lines are preserved.</p>
+        <textarea id="rawArea" rows="22" spellcheck="false"></textarea>
+        <div class="toolbar-row">
+          <button id="applyRaw" class="primary">Apply raw</button>
+          <button id="rawToStruct">Back to structured</button>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+</main>
+
+<div id="msg" class="msg" style="display:none"></div>
+
+<div id="saveModal" class="modal-overlay" hidden>
+  <div class="modal">
+    <h3>Save .xst file</h3>
+    <div class="row">
+      <label for="saveName">File name</label>
+      <input id="saveName" type="text" spellcheck="false">
+    </div>
+    <div class="row">
+      <label>Location</label>
+      <span id="savePath" class="path">— (browser default Downloads)</span>
+    </div>
+    <div class="hint">Edits you made (moves, resizes, rotations, deletes) are included in the saved file.</div>
+    <div class="actions">
+      <button id="saveCancel">Cancel</button>
+      <button id="saveNative" class="primary" title="Open the system Save-As dialog">Browse… (system dialog)</button>
+      <button id="saveDownload">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===================== PURE MODEL: parse / build-tree / emit (no DOM) ===================== */
+const SCALAR_CMDS = ['T','w','C','B','e','k','i'];
+
+function formatNum(v){
+  if(!isFinite(v)) return '0';
+  if(Number.isInteger(v)) return String(v);
+  return (Math.round(v*1e5)/1e5).toString();
+}
+function parseLine(raw){
+  const line = raw.replace(/\r$/,'');
+  const trimmed = line.trim();
+  const obj = {raw:line, type:'blank', changed:false};
+  if(trimmed === '') return obj;
+  if(trimmed[0] === '#'){ obj.type='comment'; obj.text=trimmed.slice(1); return obj; }
+  if(trimmed[0] === "'"){ obj.type='title'; obj.text=trimmed.slice(1).trim(); return obj; }
+  const sp = line.match(/\S+/g);
+  if(!sp) return obj;
+  const cmd = sp[0];
+  try{
+    if(cmd === 's'){
+      const f = sp.slice(1).map(Number);
+      obj.type='stroke';
+      obj.x=f[0]; obj.y=f[1]; obj.z=f[2]; obj.pitch=f[3]; obj.roll=f[4]; obj.turn=f[5]; obj.pressure=f[6];
+    } else if(cmd === 'l'){
+      obj.type='l'; obj.idx=+sp[1]; obj.r=+sp[2]; obj.g=+sp[3]; obj.b=+sp[4]; obj.a=sp[5]!==undefined?+sp[5]:255;
+    } else if(cmd === 'a'){
+      obj.type='a'; obj.ax=+sp[1]; obj.ay=+sp[2];
+    } else if(cmd === 'b'){
+      obj.type='b'; obj.vals=sp.slice(1).map(Number);
+    } else if(SCALAR_CMDS.includes(cmd)){
+      obj.type='scalar'; obj.cmd=cmd; obj.value=+sp[1];
+    } else if(cmd === 'L'){
+      // Layer switch command (Expresii, not in the Amami spec): selects the active
+      // layer, top-down (0 = topmost). Each subsequent stroke belongs to that layer.
+      obj.type='layer'; obj.layer=+sp[1];
+    } else {
+      obj.type='other'; obj.cmd=cmd; obj.rest=sp.slice(1);
+    }
+  }catch(e){ obj.type='other'; obj.cmd=cmd; obj.rest=sp.slice(1); }
+  return obj;
+}
+function emitLine(o){
+  // Preserve original source text for unedited lines so an untouched .xst round-trips byte-for-byte.
+  const rawOK = !o.changed && typeof o.raw === 'string';
+  switch(o.type){
+    case 'blank': return o.raw || '';
+    case 'comment': return o.raw || ('#'+(o.text||''));
+    case 'title': return "' "+(o.text||'');
+    case 'scalar': return rawOK ? o.raw : o.cmd+' '+formatNum(o.value);
+    case 'l': return rawOK ? o.raw : 'l '+o.idx+' '+Math.round(o.r)+' '+Math.round(o.g)+' '+Math.round(o.b)+(o.a!==undefined?' '+Math.round(o.a):'');
+    case 'a': return rawOK ? o.raw : 'a '+formatNum(o.ax)+' '+formatNum(o.ay);
+    case 'b': return rawOK ? o.raw : 'b '+o.vals.map(formatNum).join(' ');
+    case 'stroke': return rawOK ? o.raw : 's '+[o.x,o.y,o.z,o.pitch,o.roll,o.turn,o.pressure].map(formatNum).join(' ');
+    case 'layer': return rawOK ? o.raw : 'L '+o.layer;
+    case 'other': return o.raw || ((o.cmd||'')+(o.rest?(' '+o.rest.join(' ')):''));
+    default: return o.raw||'';
+  }
+}
+
+// ---- Build the COMMAND TREE ----
+// A *.xst is a tree:
+//   prelude    : commands before the first stroke (title, globals, l/a/b, comments)
+//   strokes[]  : each { config:[brush-config cmds in the gap before it], frames:[s-commands] }
+//   trailing   : commands after the last stroke
+// A stroke is detected by pressure events:
+//   brush-DOWN  = previous s-frame pressure 0  -> current s-frame pressure >0
+//   brush-UP    = previous s-frame pressure >0 -> current s-frame pressure  0
+// The stroke includes its leading pen-up (head) and trailing pen-up (tail); the gap
+// between two strokes' pen-ups is split so each pen-up belongs to the stroke it precedes.
+function buildTree(lines){
+  const tree={prelude:[], strokes:[], trailing:[]};
+  let phase='prelude';
+  let cur=null;                 // current stroke being built
+  let activeLayer=0;            // current layer (set by 'L <n>' commands; 0 = topmost)
+  const pendingConfig=[];       // brush-config lines seen in a gap, attach to NEXT stroke
+  const finalize=()=>{ if(cur){ tree.strokes.push(cur); cur=null; } };
+
+  for(let i=0;i<lines.length;i++){
+    const o=lines[i];
+    if(o.type==='layer'){
+      // Layer switch: affects all strokes that follow (until the next switch).
+      activeLayer=o.layer;
+      if(cur) finalize();
+      if(phase==='prelude') tree.prelude.push(o);
+      else pendingConfig.push(o);
+      continue;
+    }
+    if(o.type!=='stroke'){
+      if(cur) finalize();
+      if(phase==='prelude') tree.prelude.push(o);
+      else pendingConfig.push(o);
+      continue;
+    }
+    phase='stroke';
+    const prev=lines[i-1];
+    const downEvent = prev && prev.type==='stroke' && prev.pressure===0 && o.pressure>0;
+    if(downEvent && cur && cur.hasPress){
+      // cut: current stroke keeps up to & including its up frame; later pen-ups start the next stroke
+      let k=-1; for(let j=0;j<cur.frames.length;j++) if(cur.frames[j].pressure>0) k=j;
+      const upIdx=k+1;
+      const nextHead=cur.frames.slice(upIdx+1);
+      cur.frames=cur.frames.slice(0, upIdx+1);
+      finalize();
+      cur={config:pendingConfig.splice(0), frames:nextHead, hasPress:false, layer:activeLayer};
+    } else if(!cur){
+      cur={config:pendingConfig.splice(0), frames:[], hasPress:false, layer:activeLayer};
+    }
+    cur.frames.push(o);
+    if(o.pressure>0) cur.hasPress=true;
+  }
+  finalize();
+  if(pendingConfig.length) tree.trailing.push(...pendingConfig);
+  return tree;
+}
+
+function flatten(tree){
+  const out=[];
+  for(const o of tree.prelude) out.push(o);
+  for(const st of tree.strokes){ for(const o of st.config) out.push(o); for(const o of st.frames) out.push(o); }
+  for(const o of tree.trailing) out.push(o);
+  return out;
+}
+function parseXST(text){ return {tree: buildTree(text.split('\n').map(parseLine))}; }
+function emitXST(doc){ return flatten(doc.tree).map(emitLine).join('\n'); }
+
+function findScalar(tree,cmd){
+  for(const o of tree.prelude) if(o.type==='scalar'&&o.cmd===cmd) return o;
+  return null;
+}
+function setScalar(tree,cmd,val){
+  let o=findScalar(tree,cmd);
+  if(!o){ o={type:'scalar',cmd,value:val,changed:true}; tree.prelude.unshift(o); }
+  else o.value=val;
+}
+function findTitle(tree){
+  for(const o of tree.prelude) if(o.type==='title') return o;
+  return null;
+}
+
+/* ===================== DOM APP (guarded) ===================== */
+if(typeof document!=='undefined' && document.getElementById('svg')){
+(function(){
+  const $=id=>document.getElementById(id);
+  const doc={tree:{prelude:[],strokes:[],trailing:[]}};
+  let selected=-1, cursorFrame=-1;
+  const selSet=new Set();           // multi-selection of stroke indices
+  let selectedLayer=-1;          // -1 = none; clicking a layer highlights its strokes
+  let mode='struct';
+  const view={zoom:1,flipY:false,showFrames:false,colorMode:'stroke',weight:12,panX:0,panY:0};
+  let previewScale=1, previewFlipY=false;   // live preview scale / flip, for inverting mouse drags to data space
+  let pv=null;                               // cached preview mapping for marquee hit-testing
+  const history=[], future=[];
+  const PALETTE=['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4',
+                 '#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9a6324','#800000','#808000'];
+
+  const clone=()=>JSON.parse(JSON.stringify(doc.tree));
+  function pushHistory(){ history.push(clone()); if(history.length>80) history.shift(); future.length=0; updateUndo(); }
+  function undo(){ if(!history.length) return; future.push(clone()); doc.tree=history.pop(); afterChange(); updateUndo(); }
+  function redo(){ if(!future.length) return; history.push(clone()); doc.tree=future.pop(); afterChange(); updateUndo(); }
+  function updateUndo(){ $('undoBtn').disabled=!history.length; $('redoBtn').disabled=!future.length; }
+  function msg(t){ const m=$('msg'); m.textContent=t; m.style.display='block'; clearTimeout(msg._t); msg._t=setTimeout(()=>m.style.display='none',2200); }
+  function afterChange(){ if(selected>=doc.tree.strokes.length) selected=doc.tree.strokes.length-1; renderAll(); }
+  function titleName(){
+    const t=findTitle(doc.tree);
+    if(t&&t.text) return t.text.replace(/[<>:"/\\|?*]/g,'_').replace(/\s+/g,'_');
+    // No ' Title in the file: fall back to the file name (minus .xst extension).
+    if(currentName && currentName!=='untitled') return currentName.replace(/\.xst$/i,'');
+    return 'stroke';
+  }
+  function allFrames(){ const a=[]; for(const st of doc.tree.strokes) for(const f of st.frames) a.push(f); return a; }
+
+  /* ---------- per-stroke wireframe thumbnail ---------- */
+  function drawThumb(canvas, stroke, color){
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width, H=canvas.height;
+    ctx.clearRect(0,0,W,H); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+    const fr=stroke.frames; if(!fr.length) return;
+    let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+    for(const f of fr){ if(f.x<minX)minX=f.x; if(f.x>maxX)maxX=f.x; if(f.y<minY)minY=f.y; if(f.y>maxY)maxY=f.y; }
+    const pad=6;
+    const s=Math.min((W-2*pad)/((maxX-minX)||1),(H-2*pad)/((maxY-minY)||1));
+    const cx=(minX+maxX)/2, cy=(minY+maxY)/2, mx=W/2, my=H/2;
+    // Match the main preview: Expresii +Y = down (no flip), so a stroke reads the
+    // same way in its thumbnail as on the whole-paper preview.
+    const tx=x=>mx+(x-cx)*s, ty=y=>my+(y-cy)*s;
+    ctx.lineWidth=1.2; ctx.lineJoin='round'; ctx.lineCap='round';
+    for(let i=0;i<fr.length-1;i++){
+      const a=fr[i], b=fr[i+1];
+      ctx.strokeStyle=(a.pressure>0||b.pressure>0)?'#222':'#bbb';
+      ctx.beginPath(); ctx.moveTo(tx(a.x),ty(a.y)); ctx.lineTo(tx(b.x),ty(b.y)); ctx.stroke();
+    }
+    for(const f of fr){
+      ctx.fillStyle=f.pressure>0?'#000':'#ccc';
+      ctx.beginPath(); ctx.arc(tx(f.x),ty(f.y),1.1,0,7); ctx.fill();
+    }
+  }
+
+  /* ---------- stroke list (level-1 command list) ---------- */
+  function renderStrokeList(){
+    const list=$('strokeList'); list.innerHTML='';
+    doc.tree.strokes.forEach((s,si)=>{
+      const item=document.createElement('div');
+      item.className='stroke-item'+(selSet.has(si)?' sel':'');
+      const cv=document.createElement('canvas'); cv.className='thumb'; cv.width=64; cv.height=44;
+      drawThumb(cv, s, PALETTE[si%PALETTE.length]);
+      item.appendChild(cv);
+      const body=document.createElement('div'); body.className='body';
+      const lift=s.frames.filter(f=>f.pressure===0).length;
+      const cfg=s.config.length?('<span class="badge">cfg: '+s.config.map(c=>c.cmd||c.type).join(' ')+'</span>'):'';
+      body.innerHTML='<div class="lbl">#'+(si+1)+'</div><div class="meta">'+s.frames.length+' frames'+(lift?' · '+lift+' lift':'')+'</div>'+cfg;
+      item.appendChild(body);
+      const acts=document.createElement('span'); acts.className='acts';
+      const up=document.createElement('button'); up.textContent='↑'; up.title='Move up';
+      up.onclick=e=>{e.stopPropagation();moveStroke(si,-1);};
+      const dn=document.createElement('button'); dn.textContent='↓'; dn.title='Move down';
+      dn.onclick=e=>{e.stopPropagation();moveStroke(si,1);};
+      const del=document.createElement('button'); del.textContent='✕'; del.title='Delete';
+      del.onclick=e=>{e.stopPropagation();deleteStroke(si);};
+      acts.append(up,dn,del); item.appendChild(acts);
+      item.onclick=e=>{ if(e.shiftKey||e.ctrlKey||e.metaKey) toggleStroke(si); else selectStroke(si); };
+      list.appendChild(item);
+    });
+  }
+
+  /* ---------- layers panel ---------- */
+  function renderLayers(){
+    const list=$('layerList'); list.innerHTML='';
+    // Collect which layers exist and how many strokes each holds.
+    const counts={};
+    doc.tree.strokes.forEach(s=>{ const L = (s.layer==null?0:s.layer); counts[L]=(counts[L]||0)+1; });
+    const ids=Object.keys(counts).map(Number).sort((a,b)=>a-b); // top-down: 0 first
+    if(!ids.length){ list.innerHTML='<div class="layer-empty">No strokes yet.</div>'; return; }
+    ids.forEach(L=>{
+      const item=document.createElement('div');
+      item.className='layer-item'+(L===selectedLayer?' sel':'');
+      item.dataset.layer=L;
+      const chip=document.createElement('span'); chip.className='tw';
+      chip.style.background=PALETTE[L%PALETTE.length];
+      item.appendChild(chip);
+      const lbl=document.createElement('span'); lbl.className='lbl';
+      lbl.textContent='Layer '+L+(L===0?' (top)':'');
+      item.appendChild(lbl);
+      const meta=document.createElement('span'); meta.className='meta';
+      meta.textContent=counts[L]+' stroke'+(counts[L]===1?'':'s');
+      item.appendChild(meta);
+      item.onclick=()=>selectLayer(L);
+      list.appendChild(item);
+    });
+  }
+  function selectLayer(L){ selectedLayer=(selectedLayer===L?-1:L); renderAll(); }
+
+  function selectStroke(si){ if(si==null||si<0){ selSet.clear(); } else { selSet.clear(); selSet.add(si); } selected=si; cursorFrame=doc.tree.strokes[si]?0:-1; renderAll(); }
+  function toggleStroke(si){ if(selSet.has(si)){ selSet.delete(si); if(selected===si) selected=selSet.size?Math.max(...selSet):(doc.tree.strokes[si]?si:-1); } else { selSet.add(si); selected=si; } cursorFrame=doc.tree.strokes[si]?0:-1; renderAll(); }
+  function setSelection(arr){ selSet.clear(); arr.forEach(i=>selSet.add(i)); selected=arr.length?arr[arr.length-1]:-1; cursorFrame=selected>=0 && doc.tree.strokes[selected]?0:-1; renderAll(); }
+  function clearSelection(){ selSet.clear(); selected=-1; cursorFrame=-1; renderAll(); }
+
+  function moveStroke(si,dir){
+    const a=doc.tree.strokes, nj=si+dir; if(nj<0||nj>=a.length) return;
+    pushHistory(); [a[si],a[nj]]=[a[nj],a[si]]; afterChange();
+  }
+  function deleteStroke(si){ pushHistory(); doc.tree.strokes.splice(si,1); const ns=new Set(); for(const x of selSet){ if(x<si) ns.add(x); else if(x>si) ns.add(x-1); } selSet.clear(); ns.forEach(x=>selSet.add(x)); if(selected===si) selected=selSet.size?Math.min(si,doc.tree.strokes.length-1):-1; cursorFrame=-1; afterChange(); }
+  function duplicateStroke(si){
+    pushHistory();
+    const src=doc.tree.strokes[si]; if(!src) return;
+    const copy={config:JSON.parse(JSON.stringify(src.config)),
+                frames:JSON.parse(JSON.stringify(src.frames)).map(f=>{f.changed=true;return f;}), hasPress:src.hasPress};
+    doc.tree.strokes.splice(si+1,0,copy); afterChange(); selectStroke(si+1);
+  }
+  function addStroke(){
+    pushHistory();
+    const f=[{type:'stroke',x:0,y:0,z:0.02187,pitch:0,roll:0,turn:0,pressure:0,changed:true},
+             {type:'stroke',x:0.05,y:0,z:-0.02,pitch:0,roll:0,turn:0,pressure:0.6,changed:true},
+             {type:'stroke',x:0.1,y:0,z:0.02187,pitch:0,roll:0,turn:0,pressure:0,changed:true}];
+    doc.tree.strokes.push({config:[],frames:f,hasPress:true}); afterChange(); selectStroke(doc.tree.strokes.length-1);
+  }
+
+  /* ---------- command-list tree view (level-2) ---------- */
+  function renderTree(){
+    const box=$('docTree');
+    const cmdText=o=>{ if(o.type==='title')return "' "+(o.text||''); if(o.type==='comment')return '#'+(o.text||''); if(o.type==='blank')return '(blank)'; return o.cmd||o.type; };
+    let h='';
+    h+='<div class="tree"><div class="node prelude">Prelude: '+doc.tree.prelude.length+' cmd(s)</div>';
+    doc.tree.strokes.forEach((st,si)=>{
+      h+='<div class="stroke-node"><div class="head"><span class="tw" style="background:'+PALETTE[si%PALETTE.length]+'"></span>Stroke #'+(si+1)+' · '+st.frames.length+' frames</div>';
+      if(st.config.length) h+='<div class="cfg">config: '+st.config.map(cmdText).join('  ')+'</div>';
+      h+='<div class="frame-mini">'+st.frames.map((f,i)=>'['+i+'] s '+formatNum(f.x)+' '+formatNum(f.y)+' p'+formatNum(f.pressure)).join('<br>')+'</div></div>';
+    });
+    h+='<div class="node trailing">Trailing: '+doc.tree.trailing.length+' cmd(s)</div></div>';
+    box.innerHTML=h;
+  }
+
+  /* ---------- global params ---------- */
+  const GPARAMS=[
+    {cmd:'T',label:'T (time)'},{cmd:'w',label:'w (wetness)',min:0.01,max:1,step:0.01},
+    {cmd:'C',label:'C'},{cmd:'B',label:'B (brush size)',min:0.1,max:50,step:0.1},
+    {cmd:'e',label:'e'},{cmd:'k',label:'k'},{cmd:'i',label:'i (ink/scratch)',min:0,max:1,step:0.01},
+  ];
+  function renderGlobalParams(){
+    const box=$('globalParams'); box.innerHTML='';
+    const t=findTitle(doc.tree);
+    const f1=document.createElement('div'); f1.className='field';
+    f1.innerHTML="<label>Title ' </label>";
+    const ti=document.createElement('input'); ti.type='text'; ti.value=t?t.text:'';
+    ti.addEventListener('focus',pushHistory);
+    ti.addEventListener('change',()=>{ if(t) t.text=ti.value; else doc.tree.prelude.unshift({type:'title',text:ti.value}); afterChange(); });
+    f1.appendChild(ti); box.appendChild(f1);
+    for(const p of GPARAMS){
+      const o=findScalar(doc.tree,p.cmd);
+      const f=document.createElement('div'); f.className='field'; f.innerHTML='<label>'+p.label+'</label>';
+      const inp=document.createElement('input'); inp.type='number';
+      if(p.step) inp.step=p.step; if(p.min!==null) inp.min=p.min; if(p.max!==null) inp.max=p.max;
+      inp.value=o?o.value:''; inp.placeholder='—';
+      inp.addEventListener('focus',pushHistory);
+      inp.addEventListener('change',()=>{ const v=parseFloat(inp.value);
+        if(inp.value===''){ if(o){o.type='other';o.cmd=p.cmd;o.rest=[];} return; }
+        if(!isNaN(v)){ setScalar(doc.tree,p.cmd,v); afterChange(); } });
+      f.appendChild(inp); box.appendChild(f);
+    }
+  }
+  function renderGradient(){
+    const grid=$('gradGrid'); grid.innerHTML='';
+    const ls=doc.tree.prelude.filter(o=>o.type==='l').sort((a,b)=>a.idx-b.idx);
+    for(let i=0;i<9;i++){
+      const o=ls.find(x=>x.idx===i);
+      const cell=document.createElement('div'); cell.className='grad-cell';
+      cell.innerHTML='<span>l'+i+'</span>';
+      const c=document.createElement('input'); c.type='color';
+      const r=o?o.r:0,g=o?o.g:0,b=o?o.b:0;
+      c.value='#'+[r,g,b].map(v=>('0'+Math.round(v).toString(16)).slice(-2)).join('');
+      c.addEventListener('focus',pushHistory);
+      c.addEventListener('input',()=>{
+        const nr=parseInt(c.value.slice(1,3),16),ng=parseInt(c.value.slice(3,5),16),nb=parseInt(c.value.slice(5,7),16);
+        let cur=ls.find(x=>x.idx===i);
+        if(!cur){ cur={type:'l',idx:i,r:0,g:0,b:0,changed:true}; doc.tree.prelude.push(cur); }
+        cur.r=nr;cur.g=ng;cur.b=nb; renderAll();
+      });
+      cell.appendChild(c); grid.appendChild(cell);
+    }
+  }
+
+  /* ---------- transforms ---------- */
+  function applyTransform(){
+    if(selected<0) return; const s=doc.tree.strokes[selected]; if(!s) return;
+    pushHistory();
+    const dx=+tfDx.value, dy=+tfDy.value, sc=+tfScale.value, rot=+tfRot.value*Math.PI/180;
+    const fx=tfFlipX.checked, fy=tfFlipY.checked, pm=+tfPmul.value, pa=+tfPadd.value, za=+tfZadd.value;
+    const cos=Math.cos(rot), sin=Math.sin(rot);
+    let sx=0,sy=0; for(const g of s.frames){sx+=g.x;sy+=g.y;} sx/=s.frames.length; sy/=s.frames.length;
+    for(const f of s.frames){
+      let x=f.x-sx, y=f.y-sy;
+      let nx=x*cos-y*sin, ny=x*sin+y*cos; x=nx+sx; y=ny+sy;
+      if(fx) x=-x; if(fy) y=-y; x*=sc; y*=sc; x+=dx; y+=dy;
+      f.x=x; f.y=y; f.z+=za; f.changed=true;
+      f.pressure=Math.max(0,Math.min(1,f.pressure*pm+pa)); f.changed=true;
+    }
+    resetTfInputs(); renderAll();
+  }
+  function resetTfInputs(){ tfDx.value=0;tfDy.value=0;tfScale.value=1;tfRot.value=0;tfFlipX.checked=false;tfFlipY.checked=false;tfPmul.value=1;tfPadd.value=0;tfZadd.value=0; }
+
+  /* ---------- frame table ---------- */
+  const FCOLS=[['x','x'],['y','y'],['z','z'],['pitch','pitch'],['roll','roll'],['turn','turn'],['pressure','pressure']];
+  function renderFrameTable(){
+    const empty=$('strokeEditorEmpty'), body=$('strokeEditorBody');
+    const s=doc.tree.strokes[selected];
+    if(selected<0||!s){ empty.style.display='block'; body.style.display='none'; return; }
+    empty.style.display='none'; body.style.display='block';
+    $('seFrames').textContent=s.frames.length+' frames';
+    const t=$('frameTable');
+    let html='<thead><tr><th>#</th>'+FCOLS.map(c=>'<th>'+c[1]+'</th>').join('')+'</tr></thead><tbody>';
+    s.frames.forEach((f,fi)=>{
+      html+='<tr id="fr'+fi+'"'+(f.pressure===0?' class="lift"':'')+'>';
+      html+='<td>'+(fi===cursorFrame?'▶':'')+fi+'</td>';
+      FCOLS.forEach(c=>{ html+='<td><input data-fi="'+fi+'" data-k="'+c[0]+'" type="number" step="0.001" value="'+formatNum(f[c[0]])+'"></td>'; });
+      html+='</tr>';
+    });
+    html+='</tbody>'; t.innerHTML=html;
+    t.querySelectorAll('input').forEach(inp=>{
+      inp.addEventListener('focus',()=>{ if(!inp._snap){pushHistory();inp._snap=true;} cursorFrame=+inp.dataset.fi; });
+      inp.addEventListener('blur',()=>{inp._snap=false;});
+      inp.addEventListener('input',()=>{ const fi=+inp.dataset.fi,k=inp.dataset.k,v=parseFloat(inp.value);
+        if(isNaN(v)) return; const f=s.frames[fi]; if(f){ f[k]=v; f.changed=true; renderPreview(); } });
+    });
+  }
+
+  /* ---------- preview (whole paper) ---------- */
+  function renderPreview(){
+    const svg=$('svg'); const W=820,H=820;
+    svg.setAttribute('width',W); svg.setAttribute('height',H); svg.setAttribute('viewBox','0 0 '+W+' '+H);
+    const frames=allFrames();
+    if(!frames.length){ svg.innerHTML='<text x="50%" y="50%" fill="#999" text-anchor="middle" font-size="16">No strokes</text>'; $('legend').textContent=''; return; }
+    let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+    for(const o of frames){ if(o.x<minX)minX=o.x; if(o.x>maxX)maxX=o.x; if(o.y<minY)minY=o.y; if(o.y>maxY)maxY=o.y; }
+    const pad=24, z=view.zoom;
+    const s=Math.min((W-2*pad)/((maxX-minX)||1),(H-2*pad)/((maxY-minY)||1))*z;
+    previewScale=s; previewFlipY=view.flipY;
+    // Cache the mapping so marquee hit-testing can convert data<->screen without re-deriving it.
+    pv={minX,maxX,minY,maxY,scale:s,flip:view.flipY,pad,W,H,panX:view.panX,panY:view.panY};
+    const tx=x=>pad+(x-minX)*s+view.panX, ty=y=>pad+(view.flipY?(maxY-y)*s:(y-minY)*s)+view.panY;
+    // Paper coordinate system: Expresii canvas units are -extent..+extent.
+    // Y half-extent is fixed at 5; X half-extent scales with the paper's aspect ratio.
+    const PAPER_E=5;
+    let aspect=1;
+    const aPts=doc.tree.prelude.filter(o=>o.type==='a');
+    if(aPts.length>=2){ const xs=aPts.map(o=>o.ax), ys=aPts.map(o=>o.ay);
+      const aw=Math.max.apply(null,xs)-Math.min.apply(null,xs), ah=Math.max.apply(null,ys)-Math.min.apply(null,ys);
+      if(aw>1e-6 && ah>1e-6) aspect=aw/ah; }
+    const EX=PAPER_E*aspect, EY=PAPER_E;
+    let out='<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="#fff"/>';
+    // Grid in PAPER coordinates (subdivisions of the -EX..EX / -EY..EY box).
+    const N=10;
+    out+='<g stroke="#eee" stroke-width="1">';
+    for(let g=0;g<=N;g++){
+      const cx=tx(-EX+(2*EX)*g/N);
+      if(cx>=pad-0.5 && cx<=W-pad+0.5) out+='<line x1="'+cx.toFixed(1)+'" y1="'+pad+'" x2="'+cx.toFixed(1)+'" y2="'+(H-pad)+'"/>';
+    }
+    for(let g=0;g<=N;g++){
+      const cy=ty(-EY+(2*EY)*g/N);
+      if(cy>=pad-0.5 && cy<=H-pad+0.5) out+='<line x1="'+pad+'" y1="'+cy.toFixed(1)+'" x2="'+(W-pad)+'" y2="'+cy.toFixed(1)+'"/>';
+    }
+    out+='</g>';
+    // Paper boundary (dashed) when visible.
+    const bx0=tx(-EX), bx1=tx(EX), by0=ty(-EY), by1=ty(EY);
+    if(bx0>=pad&&bx1<=W-pad&&by0>=pad&&by1<=H-pad)
+      out+='<rect x="'+bx0.toFixed(1)+'" y="'+by0.toFixed(1)+'" width="'+(bx1-bx0).toFixed(1)+'" height="'+(by1-by0).toFixed(1)+'" fill="none" stroke="#bbb" stroke-dasharray="4 4"/>';
+    // X / Y axes through the paper origin (0,0). Expresii convention: +X right, +Y down.
+    const ox=tx(0), oy=ty(0);
+    const axY=Math.max(pad,Math.min(H-pad,oy)), ayX=Math.max(pad,Math.min(W-pad,ox));
+    out+='<g font-size="11" font-family="monospace">';
+    if(pad<=ox&&ox<=W-pad) out+='<line x1="'+ox.toFixed(1)+'" y1="'+pad+'" x2="'+ox.toFixed(1)+'" y2="'+(H-pad)+'" stroke="#36c" stroke-width="1.5"/>';
+    if(pad<=oy&&oy<=H-pad) out+='<line x1="'+pad+'" y1="'+oy.toFixed(1)+'" x2="'+(W-pad)+'" y2="'+oy.toFixed(1)+'" stroke="#d33" stroke-width="1.5"/>';
+    if(pad<=ox&&ox<=W-pad&&pad<=oy&&oy<=H-pad) out+='<circle cx="'+ox.toFixed(1)+'" cy="'+oy.toFixed(1)+'" r="3" fill="#000"/>';
+    const fmt=v=>(Math.round(v*1e4)/1e4).toString();
+    out+='<text x="'+ayX.toFixed(1)+'" y="'+(pad+11)+'" fill="#36c">'+fmt(EY)+'</text>';
+    out+='<text x="'+ayX.toFixed(1)+'" y="'+(H-pad-3)+'" fill="#36c">'+fmt(-EY)+'</text>';
+    out+='<text x="'+pad+'" y="'+(axY-4).toFixed(1)+'" fill="#d33">'+fmt(-EX)+'</text>';
+    out+='<text x="'+(W-pad-4)+'" y="'+(axY-4).toFixed(1)+'" fill="#d33" text-anchor="end">'+fmt(EX)+'</text>';
+    out+='<text x="'+(W-pad-4)+'" y="'+(axY+14).toFixed(1)+'" fill="#d33" text-anchor="end">+X</text>';
+    out+='<text x="'+(ayX+5).toFixed(1)+'" y="'+(H-pad-14).toFixed(1)+'" fill="#36c">+Y (down)</text>';
+    out+='</g>';
+    const wmax=view.weight;
+    doc.tree.strokes.forEach((st,si)=>{
+      const col=view.colorMode==='stroke'?PALETTE[si%PALETTE.length]:'#111';
+      out+='<g class="stroke-g" data-si="'+si+'" style="cursor:pointer">';
+      for(let i=0;i<st.frames.length-1;i++){
+        const a=st.frames[i], b=st.frames[i+1], pa=a.pressure, pb=b.pressure;
+        const w=Math.max(0.4,(pa+pb)/2*wmax);
+        const op=view.colorMode==='ink'?(0.2+0.8*((pa+pb)/2)):1;
+        out+='<line x1="'+tx(a.x).toFixed(1)+'" y1="'+ty(a.y).toFixed(1)+'" x2="'+tx(b.x).toFixed(1)+'" y2="'+ty(b.y).toFixed(1)+'" stroke="'+col+'" stroke-width="'+w.toFixed(2)+'" stroke-opacity="'+op.toFixed(2)+'" stroke-linecap="round"/>';
+      }
+      if(view.showFrames) st.frames.forEach((f,fi)=>{ out+='<circle cx="'+tx(f.x).toFixed(1)+'" cy="'+ty(f.y).toFixed(1)+'" r="'+(fi===cursorFrame?3:1.4).toFixed(1)+'" fill="'+(f.pressure>0?'#000':'#bbb')+'"/>'; });
+      out+='</g>';
+    });
+    svg.innerHTML=out;
+    // Draw edit frame on top of everything (if a stroke is selected)
+    if(selSet.size >= 1){
+      const frameSvg = drawEditFrame();
+      if(frameSvg){
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.innerHTML = frameSvg;
+        svg.appendChild(g);
+      }
+    }
+    // Determine which strokes are "active": if a layer is selected, only that layer's
+    // strokes are active; otherwise all selected strokes (or all, if nothing selected).
+    const layerActive = selectedLayer>=0;
+    const hasSel = selSet.size>0;
+    const isActive = si => layerActive ? (doc.tree.strokes[si].layer==null?0:doc.tree.strokes[si].layer)===selectedLayer : (hasSel ? selSet.has(si) : true);
+    // highlight the selected stroke group(s): glow each selected stroke (emphasis)
+    svg.querySelectorAll('.stroke-g').forEach(g=>{ if(selSet.has(+g.dataset.si)) g.setAttribute('filter','url(#glow)'); });
+    svg.querySelectorAll('.stroke-g').forEach(g=>{
+      const si=+g.dataset.si;
+      if(isActive(si)){ g.setAttribute('opacity','1'); }
+      else if(!layerActive && si===selected){ g.setAttribute('opacity','1'); }
+      else { g.setAttribute('opacity', view.colorMode==='ink'? g.getAttribute('opacity') : '0.2'); }
+    });
+    // ensure glow filter def exists
+    if(!svg.querySelector('defs')) svg.insertAdjacentHTML('afterbegin','<defs><filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feMorphology operator="dilate" radius="2" in="SourceGraphic" result="d"/><feMerge><feMergeNode in="d"/></feMerge></filter></defs>');
+    $('legend').innerHTML = view.colorMode==='stroke' && doc.tree.strokes.length
+      ? '<b>Strokes:</b> '+doc.tree.strokes.map((st,si)=>'<span class="lgnum" data-si="'+si+'" style="color:'+(selSet.has(si)?'#fff;background:'+PALETTE[si%PALETTE.length]:PALETTE[si%PALETTE.length])+';cursor:pointer">■'+(si+1)+(selSet.has(si)?'*':'')+'</span>').join(' ')
+      : 'Ink mode — opacity = pressure.'+ (selected>=0?(' · highlighted #'+(selected+1)):'');
+  }
+
+  function renderAll(){ renderGlobalParams(); renderGradient(); renderLayers(); renderStrokeList(); renderTree(); renderFrameTable(); renderPreview(); updateStat(); }
+  function zoomToFit(){
+    // The base preview mapping already normalizes content to fit the canvas at zoom=1
+    // (content spans (820-2*pad)*zoom px regardless of extent), so "fit" == reset zoom + pan.
+    setZoom(1); view.panX=0; view.panY=0; renderPreview();
+  }
+  function setZoom(z){ view.zoom=z; $('zoom').value=z; const v=$('zoomVal'); if(v) v.textContent=(Math.round(z*10)/10)+'×'; }
+  function updateStat(){ let f=allFrames().length; const name=currentName&&currentName!=='untitled'?currentName:'(untitled)'; $('statPill').textContent=name+' · '+doc.tree.strokes.length+' strokes · '+f+' frames'; $('saveBtn').disabled = doc.tree.strokes.length===0; }
+
+  /* ---------- raw mode ---------- */
+  function toRaw(){ $('rawArea').value=emitXST(doc); }
+  function applyRaw(){ try{ const nd=parseXST($('rawArea').value); if(!nd.tree) throw 0; doc.tree=nd.tree; selSet.clear(); selected=-1;cursorFrame=-1; afterChange(); msg('Raw applied'); }catch(e){ msg('Parse failed'); } }
+
+  /* ---------- recent files ---------- */
+  const RECENT_KEY='xst-recent-v1', RECENT_MAX=12;
+  function loadRecents(){ try{ return JSON.parse(localStorage.getItem(RECENT_KEY))||[]; }catch(e){ return []; } }
+  function saveRecents(list){ try{ localStorage.setItem(RECENT_KEY, JSON.stringify(list)); }catch(e){} }
+  function addRecent(name, text){
+    let list=loadRecents().filter(r=>r.name!==name);
+    list.unshift({name, text, ts:Date.now()});
+    list=list.slice(0,RECENT_MAX);
+    saveRecents(list); renderRecentsMenu();
+  }
+  function removeRecent(name){ saveRecents(loadRecents().filter(r=>r.name!==name)); renderRecentsMenu(); }
+  function openRecent(name){
+    const r=loadRecents().find(x=>x.name===name);
+    if(!r){ msg('Recent file missing'); return; }
+    doc.tree=parseXST(r.text).tree; selSet.clear(); selected=-1; cursorFrame=-1; view.panX=0; view.panY=0;
+    history.length=0; future.length=0; updateUndo(); afterChange(); zoomToFit(); msg('Opened '+(currentName=r.name));
+  }
+  function renderRecentsMenu(){
+    const menu=$('recentMenu'); const list=loadRecents();
+    if(!list.length){ menu.innerHTML='<div class="empty">No recent files yet.</div>'; return; }
+    menu.innerHTML=list.map(r=>{
+      const when=new Date(r.ts); const d=when.toLocaleDateString()+' '+when.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      return '<div class="item" data-name="'+escapeHtml(r.name)+'"><span class="nm" title="'+escapeHtml(r.name)+'">'+escapeHtml(r.name)+
+        '</span><span class="meta">'+d+'</span><button class="x" title="Remove" data-x="'+escapeHtml(r.name)+'">×</button></div>';
+    }).join('');
+  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function toggleRecentMenu(){ renderRecentsMenu(); const m=$('recentMenu'); m.hidden=!m.hidden; if(!m.hidden) $('recentBtn').focus(); }
+
+  /* ---------- file io ---------- */
+  let currentName='untitled';
+  function defaultSaveName(){
+    if(currentName && currentName!=='untitled') return currentName.replace(/\.xst$/i,'');
+    const t=findTitle(doc.tree);
+    if(t&&t.text) return t.text.replace(/[<>:"\/\\|?*]/g,'_').replace(/\s+/g,'_');
+    return 'stroke';
+  }
+  function openFile(file){ const r=new FileReader();
+    r.onload=()=>{ doc.tree=parseXST(r.result).tree; currentName=file.name; addRecent(file.name, r.result);
+      selSet.clear(); selected=-1;cursorFrame=-1; view.panX=0; view.panY=0; history.length=0;future.length=0; updateUndo(); afterChange(); zoomToFit(); msg('Loaded '+file.name); };
+    r.readAsText(file); }
+
+  // True round-trip of the CURRENT (edited) document.
+  function currentXSTText(){ return emitXST(doc); }
+
+  // --- Save dialog (filename + location) ---
+  const saveModal=$('saveModal');
+  function openSaveDialog(){
+    if(doc.tree.strokes.length===0){ msg('Nothing to save (no strokes)'); return; }
+    $('saveName').value=defaultSaveName();
+    $('savePath').textContent='— (browser default Downloads)';
+    saveModal.hidden=false;
+    $('saveName').focus(); $('saveName').select();
+  }
+  function closeSaveDialog(){ saveModal.hidden=true; }
+
+  // Plain download with the name from the dialog (works in every browser).
+  function saveDownload(){
+    let name=$('saveName').value.trim() || defaultSaveName();
+    if(!/\.xst$/i.test(name)) name+='.xst';
+    const blob=new Blob([currentXSTText()],{type:'text/plain'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
+    currentName=name; updateStat(); closeSaveDialog(); msg('Saved '+name);
+  }
+  // Native system Save-As dialog (Chromium / File System Access API): lets the user pick a real path.
+  async function saveNative(){
+    let name=$('saveName').value.trim() || defaultSaveName();
+    if(!/\.xst$/i.test(name)) name+='.xst';
+    try{
+      if(typeof window.showSaveFilePicker!=='function'){ saveDownload(); return; }
+      const opts={ suggestedName:name, types:[{description:'Expresii Stroke File', accept:{'text/plain':['.xst','.txt']}}] };
+      const handle=await window.showSaveFilePicker(opts);
+      const writable=await handle.createWritable();
+      await writable.write(currentXSTText());
+      await writable.close();
+      currentName=handle.name; updateStat(); closeSaveDialog(); msg('Saved '+handle.name);
+    }catch(err){
+      if(err && err.name==='AbortError') return;          // user cancelled the system dialog
+      console.warn('showSaveFilePicker failed, falling back to download', err);
+      saveDownload();
+    }
+  }
+  function saveFile(){ openSaveDialog(); }
+
+  /* ---------- wire up ---------- */
+  $('openBtn').onclick=()=>$('fileInput').click();
+  $('fileInput').onchange=e=>{ if(e.target.files[0]) openFile(e.target.files[0]); e.target.value=''; };
+  $('saveBtn').onclick=saveFile;
+  // Recent dropdown
+  $('recentBtn').onclick=e=>{ e.stopPropagation(); toggleRecentMenu(); };
+  $('recentMenu').addEventListener('click', e=>{
+    const xbtn=e.target.closest('.x');
+    if(xbtn){ e.stopPropagation(); removeRecent(xbtn.dataset.x); return; }
+    const item=e.target.closest('.item');
+    if(item){ openRecent(item.dataset.name); $('recentMenu').hidden=true; }
+  });
+  // New dropdown
+  $('newBtn').onclick=e=>{ e.stopPropagation(); const m=$('newMenu'); m.hidden=!m.hidden; };
+  $('newMenu').addEventListener('click', e=>{ const item=e.target.closest('.item'); if(item){ if(item.dataset.act==='blank') newBlank(); else newDemo(); $('newMenu').hidden=true; } });
+  document.addEventListener('click', e=>{ if(!e.target.closest('.dropdown')){ $('recentMenu').hidden=true; $('newMenu').hidden=true; } });
+  $('undoBtn').onclick=undo; $('redoBtn').onclick=redo;
+  // Save dialog wiring
+  $('saveBtn').onclick=saveFile;
+  $('saveCancel').onclick=closeSaveDialog;
+  $('saveDownload').onclick=saveDownload;
+  $('saveNative').onclick=saveNative;
+  $('saveName').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); saveDownload(); } });
+  saveModal.addEventListener('click',e=>{ if(e.target===saveModal) closeSaveDialog(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !saveModal.hidden) closeSaveDialog(); });
+  $('addStrokeBtn').onclick=addStroke;
+  $('dupStrokeBtn').onclick=()=>{ if(selected>=0) duplicateStroke(selected); else msg('Select a stroke first'); };
+  $('applyTf').onclick=applyTransform; $('resetTf').onclick=resetTfInputs;
+  $('insFrame').onclick=()=>{ if(selected<0) return; const s=doc.tree.strokes[selected]; pushHistory();
+    const fi=Math.max(0,cursorFrame); const ref=s.frames[fi];
+    const nf={type:'stroke',x:ref.x,y:ref.y,z:ref.z,pitch:ref.pitch,roll:ref.roll,turn:ref.turn,pressure:ref.pressure,changed:true};
+    s.frames.splice(fi+1,0,nf); cursorFrame=fi+1; afterChange(); };
+  $('delFrame').onclick=()=>{ if(selected<0) return; const s=doc.tree.strokes[selected];
+    if(cursorFrame<0||cursorFrame>=s.frames.length) return; pushHistory(); s.frames.splice(cursorFrame,1); cursorFrame=Math.max(0,cursorFrame-1); afterChange(); };
+  $('modeStruct').onclick=()=>{ mode='struct'; $('structPanel').style.display='block'; $('rawPanel').style.display='none';
+    $('modeStruct').classList.add('primary'); $('modeRaw').classList.remove('primary'); afterChange(); };
+  $('modeRaw').onclick=()=>{ mode='raw'; toRaw(); $('structPanel').style.display='none'; $('rawPanel').style.display='block';
+    $('modeRaw').classList.add('primary'); $('modeStruct').classList.remove('primary'); };
+  $('applyRaw').onclick=applyRaw; $('rawToStruct').onclick=()=>$('modeStruct').onclick();
+  $('zoomFit').onclick=zoomToFit;
+  const svgEl=$('svg');
+  // Suppress the right-click context menu over the canvas so right-drag pans cleanly.
+  svgEl.addEventListener('contextmenu',e=>e.preventDefault());
+  // --- selection + drag interactions (left mouse) ---
+  //  * click a stroke        -> select it (replace)
+  //  * shift/ctrl+click       -> toggle it in the selection
+  //  * drag on a selected stroke -> move ALL selected strokes
+  //  * drag on empty canvas   -> rubber-band marquee (select intersecting strokes)
+  //  * right-drag             -> pan
+  let dragMode='none', dragSi=-1, startX=0, startY=0, lastX=0, lastY=0, moved=false, downSi=-1, additive=false;
+  let editFrameDrag = null; // {mode:'resize'|'rotate', handle:'tl'|'tr'|'bl'|'br'|'t'|'b'|'l'|'r'|'rot', startRect, startAngle, pivot, selIndices[]}
+  function toSvg(clientX,clientY){ const r=svgEl.getBoundingClientRect(); const side=Math.min(r.width,r.height)||1; const scale=side/820; const offX=(r.width-side)/2, offY=(r.height-side)/2; return { x:(clientX-r.left-offX)/scale, y:(clientY-r.top-offY)/scale }; }
+  // Inverse of the preview mapping: 820-space (SVG user units) -> DATA-space (stroke coords).
+  // Forward (renderPreview): X = pad + (x - minX)*scale + panX  =>  x = minX + (X - pad - panX)/scale
+  //                         Y = pad + (y - minY)*scale + panY  =>  y = minY + (Y - pad - panY)/scale
+  function svgToData(x, y){
+    if(!pv) return {x, y};
+    const dx = pv.minX + (x - pv.pad - pv.panX) / pv.scale;
+    let dy;
+    if(pv.flip) dy = pv.maxY - (y - pv.pad - pv.panY) / pv.scale;
+    else dy = pv.minY + (y - pv.pad - pv.panY) / pv.scale;
+    return {x: dx, y: dy};
+  }
+  // Screen-space (820x820) bounding box of a stroke's nodes, using the cached preview mapping.
+  function strokeScreenBBox(si){
+    if(!pv) return null;
+    let a=1e9,b=-1e9,c=1e9,d=-1e9;
+    for(const f of doc.tree.strokes[si].frames){
+      const X=pv.pad+(f.x-pv.minX)*pv.scale+pv.panX;
+      const Y=pv.flip ? (pv.pad+(pv.maxY-f.y)*pv.scale+pv.panY) : (pv.pad+(f.y-pv.minY)*pv.scale+pv.panY);
+      if(X<a)a=X; if(X>b)b=X; if(Y<c)c=Y; if(Y>d)d=Y;
+    }
+    return {x0:a,y0:c,x1:b,y1:d};
+  }
+  function rectsIntersect(p,q){ return p.x0<=q.x1 && p.x1>=q.x0 && p.y0<=q.y1 && p.y1>=q.y0; }
+  // Does the marquee rectangle (820-space) actually touch a stroke's geometry?
+  // We test the stroke's real segments against the rect — NOT its axis-aligned
+  // bounding box. A long slanted stroke has a huge AABB, so an AABB test wrongly
+  // selects it whenever a marquee merely overlaps that box (e.g. while dragging
+  // near a nearby short stroke). Segment testing fixes that false positive.
+  function marqueeHitsStroke(si, m){
+    if(!pv) return false;
+    const s = doc.tree.strokes[si];
+    const fx = f => pv.pad + (f.x - pv.minX) * pv.scale + pv.panX;
+    const fy = f => pv.flip ? (pv.pad + (pv.maxY - f.y) * pv.scale + pv.panY) : (pv.pad + (f.y - pv.minY) * pv.scale + pv.panY);
+    const inside = (x,y) => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1;
+    const fr = s.frames;
+    // A single-node stroke: hit if that point is inside the marquee.
+    if(fr.length === 1){ const x=fx(fr[0]), y=fy(fr[0]); return inside(x,y); }
+    // Liang–Barsky: does segment (p0->p1) cross the marquee rect?
+    for(let i=0;i<fr.length-1;i++){
+      let x0=fx(fr[i]), y0=fy(fr[i]), x1=fx(fr[i+1]), y1=fy(fr[i+1]);
+      if(inside(x0,y0) || inside(x1,y1)) return true; // endpoint inside rect
+      const dx=x1-x0, dy=y1-y0;
+      let t0=0, t1=1;
+      const P=[-dx,dx,-dy,dy], Q=[x0-m.x0, m.x1-x0, y0-m.y0, m.y1-y0];
+      let ok=true;
+      for(let k=0;k<4;k++){
+        if(P[k]===0){ if(Q[k]<0){ ok=false; break; } }
+        else { const r=Q[k]/P[k]; if(P[k]<0){ if(r>t1){ ok=false; break; } if(r>t0) t0=r; } else { if(r<t0){ ok=false; break; } if(r<t1) t1=r; } }
+      }
+      if(ok && t0<=t1) return true;
+    }
+    return false;
+  }
+  const marquee=document.getElementById('marquee');
+  function showMarquee(x0,y0,x1,y1){ marquee.hidden=false; marquee.style.left=Math.min(x0,x1)+'px'; marquee.style.top=Math.min(y0,y1)+'px'; marquee.style.width=Math.abs(x1-x0)+'px'; marquee.style.height=Math.abs(y1-y0)+'px'; }
+  function hideMarquee(){ marquee.hidden=true; }
+
+  /* ---------- edit frame (group bounding box with handles) ---------- */
+  function computeSelectionBounds(){
+    if(selSet.size===0) return null;
+    let minX=1e9, maxX=-1e9, minY=1e9, maxY=-1e9;
+    for(const si of selSet){
+      const st = doc.tree.strokes[si];
+      for(const f of st.frames){
+        const X = pv.pad + (f.x - pv.minX) * pv.scale + pv.panX;
+        const Y = pv.flip ? (pv.pad + (pv.maxY - f.y) * pv.scale + pv.panY) : (pv.pad + (f.y - pv.minY) * pv.scale + pv.panY);
+        if(X < minX) minX = X;
+        if(X > maxX) maxX = X;
+        if(Y < minY) minY = Y;
+        if(Y > maxY) maxY = Y;
+      }
+    }
+    if(minX > maxX) return null;
+    return {x0: minX, y0: minY, x1: maxX, y1: maxY};
+  }
+  const ROT_LEN = 24; // rotation handle distance above the frame's top edge
+  function drawEditFrame(){
+    if(selSet.size < 1) return '';
+    const bounds = computeSelectionBounds();
+    if(!bounds) return '';
+    const {x0, y0, x1, y1} = bounds;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const w = x1 - x0, h = y1 - y0;
+    const hs = 6; // handle size
+    const rotLen = ROT_LEN; // rotation handle distance from top edge
+    // Frame rect + 8 resize handles + 1 rotation handle
+    // IMPORTANT: the bounding rectangle must NOT capture clicks (otherwise clicking a
+    // stroke *inside* the frame hits the rect and starts a marquee instead of grabbing
+    // the stroke). Handles use pointer-events:all explicitly; the rect uses none, and the
+    // group wrapper carries no global pointer-events so strokes below stay clickable.
+    let out = '<g class="edit-frame">';
+    // bounding rectangle — transparent to clicks, just visual
+    out += '<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="none" stroke="#36c" stroke-width="1.5" stroke-dasharray="4 4" pointer-events="none"/>';
+    // corner handles
+    const corners = [
+      {id:'tl', x:x0, y:y0}, {id:'tr', x:x1, y:y0},
+      {id:'bl', x:x0, y:y1}, {id:'br', x:x1, y:y1}
+    ];
+    // edge-mid handles
+    const edges = [
+      {id:'t', x:cx, y:y0}, {id:'b', x:cx, y:y1},
+      {id:'l', x:x0, y:cy}, {id:'r', x:x1, y:cy}
+    ];
+    out += '<g>';
+    for(const c of corners){
+      out += '<rect class="ef-handle ef-corner" data-handle="'+c.id+'" x="'+(c.x-hs/2)+'" y="'+(c.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#36c" stroke="#fff" stroke-width="1" cursor="nwse-resize" pointer-events="all"/>';
+    }
+    for(const e of edges){
+      const cursor = (e.id==='t'||e.id==='b') ? 'ns-resize' : 'ew-resize';
+      out += '<rect class="ef-handle ef-edge" data-handle="'+e.id+'" x="'+(e.x-hs/2)+'" y="'+(e.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#36c" stroke="#fff" stroke-width="1" cursor="'+cursor+'" pointer-events="all"/>';
+    }
+    // rotation handle. When a rotation drag is in progress, the handle tracks the live
+    // mouse angle around the pivot so it stays under the cursor; otherwise it rests a
+    // fixed distance above the frame's top-center.
+    let rx = cx, ry = y0 - rotLen;
+    if(editFrameDrag && editFrameDrag.mode==='rotate'){
+      // Red handle tracks the live cursor: radius = distance from pivot to cursor, so the
+      // handle sits exactly under the mouse while rotating.
+      const p = editFrameDrag.pivotScreen, cur = editFrameDrag.handleCur;
+      const rad = Math.max(1, Math.hypot(cur.x - p.x, cur.y - p.y));
+      const ang = Math.atan2(cur.y - p.y, cur.x - p.x);
+      rx = p.x + Math.cos(ang)*rad;
+      ry = p.y + Math.sin(ang)*rad;
+    }
+    out += '<line x1="'+cx+'" y1="'+y0+'" x2="'+rx+'" y2="'+ry+'" stroke="#36c" stroke-width="1.5" stroke-dasharray="2 2" pointer-events="none"/>';
+    out += '<circle class="ef-handle ef-rot" data-handle="rot" cx="'+rx+'" cy="'+ry+'" r="'+hs+'" fill="#d33" stroke="#fff" stroke-width="1" cursor="grab" pointer-events="all"/>';
+    out += '</g></g>';
+    return out;
+  }
+
+  svgEl.addEventListener('mousedown',e=>{
+    if(e.button!==0 && e.button!==2) return;
+    // Check for edit frame handle click first (highest priority when a stroke is selected)
+    const efHandle = e.target.closest('.ef-handle');
+    if(efHandle && selSet.size >= 1){
+      // Capture the drag start point here — it is used by the rotation angle math (below)
+      // and must be set BEFORE the rotation branch, otherwise startX/startY stay undefined
+      // and the rotation produces NaN coordinates (handle/geometry vanish).
+      startX = e.clientX; startY = e.clientY; lastX = e.clientX; lastY = e.clientY; moved = false;
+      const handle = efHandle.dataset.handle;
+      const bounds = computeSelectionBounds();
+      if(bounds){
+        // PIVOT in SCREEN space (820) — used for hit-testing & angle math
+        const cx = (bounds.x0 + bounds.x1) / 2, cy = (bounds.y0 + bounds.y1) / 2;
+        // PIVOT in DATA space — used for actual coordinate transforms
+        const pd = svgToData(cx, cy);
+        // Snapshot ORIGINAL stroke coordinates (so each drag starts from the unmodified geometry)
+        const orig = {};
+        for(const si of selSet){
+          orig[si] = doc.tree.strokes[si].frames.map(f => ({x: f.x, y: f.y}));
+        }
+        editFrameDrag = {
+          mode: handle === 'rot' ? 'rotate' : 'resize',
+          handle,
+          startRect: {...bounds},            // screen-space bounds (820)
+          pivotScreen: {x: cx, y: cy},       // screen-space pivot
+          pivotData: pd,                     // data-space pivot
+          orig,                              // original frame coords keyed by stroke index
+          selIndices: Array.from(selSet),
+          handleCur: {x: cx, y: bounds.y0 - ROT_LEN}     // live mouse position in 820-space (init at rest handle)
+        };
+        svgEl.style.cursor = handle === 'rot' ? 'grabbing' : (handle==='t'||handle==='b' ? 'ns-resize' : handle==='l'||handle==='r' ? 'ew-resize' : 'nwse-resize');
+        pushHistory();
+        e.stopPropagation();
+        return;
+      }
+    }
+    const g=e.target.closest('.stroke-g');
+    downSi = g ? (+g.dataset.si) : -1;
+    additive = e.shiftKey||e.ctrlKey||e.metaKey;
+    startX=e.clientX; startY=e.clientY; lastX=e.clientX; lastY=e.clientY; moved=false;
+    if(e.button===2){ // right-drag pans
+      dragMode='pan'; svgEl.style.cursor='grabbing'; return;
+    }
+    // left button
+    if(e.shiftKey||e.ctrlKey||e.metaKey){
+      if(downSi>=0){ toggleStroke(downSi); } // toggle, no drag
+      return;
+    }
+    if(downSi>=0){
+      if(!selSet.has(downSi)){ selectStroke(downSi); } // unselected stroke -> select it, then drag just it
+      else if(!additive){ /* already in selection, no modifier -> drag the WHOLE selection, keep it */ }
+      dragMode='stroke'; dragSi=downSi; svgEl.style.cursor='move'; pushHistory();
+    } else {
+      dragMode='marquee'; // rubber-band; may become a plain empty click on mouseup
+    }
+  });
+  window.addEventListener('mousemove',e=>{
+    if(editFrameDrag){
+      const st = editFrameDrag;
+      const handle = st.handle;
+      const pivotScreen = st.pivotScreen;          // {x,y} in 820-space
+      const pivotData = st.pivotData;              // {x,y} in data-space
+      const b = toSvg(e.clientX, e.clientY);      // current pointer in 820-space
+      if(st.mode === 'rotate'){
+        st.handleCur = b;   // live mouse position in 820-space (drives the red handle + angle)
+        const angStart = Math.atan2(toSvg(startX, startY).y - pivotScreen.y, toSvg(startX, startY).x - pivotScreen.x);
+        const angEnd = Math.atan2(b.y - pivotScreen.y, b.x - pivotScreen.x);
+        const dAng = angEnd - angStart;
+        const cos = Math.cos(dAng), sin = Math.sin(dAng);
+        for(const si of st.selIndices){
+          const orig = st.orig[si];
+          const frs = doc.tree.strokes[si].frames;
+          for(let i=0; i<frs.length; i++){
+            const ox = orig[i].x - pivotData.x, oy = orig[i].y - pivotData.y;
+            frs[i].x = pivotData.x + (ox*cos - oy*sin);
+            frs[i].y = pivotData.y + (ox*sin + oy*cos);
+            frs[i].changed = true;
+          }
+        }
+      } else {
+        // Resize: scale factors from screen-space pointer & bounds.
+        // For 't'/'l' handles use the OPPOSITE edge as the fixed anchor.
+        const bx0 = st.startRect.x0, by0 = st.startRect.y0, bx1 = st.startRect.x1, by1 = st.startRect.y1;
+        let sx = 1, sy = 1;
+        if(handle.indexOf('r') >= 0) sx = (b.x - bx0) / (bx1 - bx0);
+        if(handle.indexOf('l') >= 0) sx = (bx1 - b.x) / (bx1 - bx0);
+        if(handle.indexOf('b') >= 0) sy = (b.y - by0) / (by1 - by0);
+        if(handle.indexOf('t') >= 0) sy = (by1 - b.y) / (by1 - by0);
+        sx = Math.max(0.01, sx); sy = Math.max(0.01, sy);
+        // Fixed anchor point (the edge opposite the dragged handle), in data-space.
+        let anchorX = pivotData.x, anchorY = pivotData.y;
+        if(handle.indexOf('r') >= 0) anchorX = svgToData(bx0, 0).x;
+        if(handle.indexOf('l') >= 0) anchorX = svgToData(bx1, 0).x;
+        if(handle.indexOf('b') >= 0) anchorY = svgToData(0, by0).y;
+        if(handle.indexOf('t') >= 0) anchorY = svgToData(0, by1).y;
+        for(const si of st.selIndices){
+          const orig = st.orig[si];
+          const frs = doc.tree.strokes[si].frames;
+          for(let i=0; i<frs.length; i++){
+            frs[i].x = anchorX + (orig[i].x - anchorX) * sx;
+            frs[i].y = anchorY + (orig[i].y - anchorY) * sy;
+            frs[i].changed = true;
+          }
+        }
+      }
+      renderPreview();
+      return;
+    }
+    if(dragMode==='none') return;
+    const dxc=e.clientX-lastX, dyc=e.clientY-lastY;
+    if((dragMode==='pan'||dragMode==='stroke'||dragMode==='marquee') && (Math.abs(e.clientX-startX)+Math.abs(e.clientY-startY)>3)) moved=true;
+    if(dragMode==='pan'){
+      view.panX+=dxc; view.panY+=dyc; lastX=e.clientX; lastY=e.clientY; renderPreview();
+    } else if(dragMode==='stroke'){
+      // Move ALL selected strokes by the same data-space delta (respecting Y flip).
+      const dx=(e.clientX-lastX)/previewScale, dy=(e.clientY-lastY)/previewScale;
+      lastX=e.clientX; lastY=e.clientY;
+      for(const si of selSet){ const s=doc.tree.strokes[si]; for(const f of s.frames){ f.x+=dx; f.y+=previewFlipY? -dy : dy; f.changed=true; } }
+      renderPreview();
+    } else if(dragMode==='marquee'){
+      const r=svgEl.getBoundingClientRect();
+      showMarquee(startX,startY,e.clientX,e.clientY);
+    }
+  });
+  window.addEventListener('mouseup',e=>{
+    if(editFrameDrag){
+      editFrameDrag = null;
+      svgEl.style.cursor = '';
+      afterChange();
+      return;
+    }
+    if(dragMode==='stroke'){
+      // pure click on a selected stroke (no drag) collapses a multi-selection to just it
+      if(!moved && selSet.size>1 && downSi>=0 && !additive){ selectStroke(downSi); }
+    } else if(dragMode==='marquee'){
+      hideMarquee();
+      if(moved){
+        const a=toSvg(startX,startY), b=toSvg(e.clientX,e.clientY);
+        const m={x0:Math.min(a.x,b.x),y0:Math.min(a.y,b.y),x1:Math.max(a.x,b.x),y1:Math.max(a.y,b.y)};
+        const hit=[]; doc.tree.strokes.forEach((s,si)=>{ if(marqueeHitsStroke(si, m)) hit.push(si); });
+        if(additive){ hit.forEach(si=>selSet.add(si)); if(hit.length) selected=hit[hit.length-1]; renderAll(); }
+        else { setSelection(hit); }
+      } else {
+        if(!additive) clearSelection(); // plain click on empty space
+      }
+    }
+    dragMode='none'; dragSi=-1; svgEl.style.cursor='';
+  });
+
+  // Wheel zoom anchored at the cursor's position over the canvas.
+  svgEl.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const rect=svgEl.getBoundingClientRect();
+    const old=view.zoom;
+    const factor=Math.exp(-e.deltaY*0.0015);
+    let nz=Math.max(0.2,Math.min(40,old*factor));
+    const r=nz/old;
+    // Convert the cursor from CSS pixels to SVG user-space (820x820 viewBox),
+    // robust to CSS scaling of the rendered SVG.
+    const ux=(e.clientX-rect.left)*(820/(rect.width||1));
+    const uy=(e.clientY-rect.top)*(820/(rect.height||1));
+    // Keep the user-space point under the cursor stationary:
+    // tx(x) = B(x)*z + pan,  with B(x) scaling by z  =>  pan' = pan*r + u*(1-r)
+    view.panX = view.panX*r + ux*(1-r);
+    view.panY = view.panY*r + uy*(1-r);
+    setZoom(nz); renderPreview();
+  },{passive:false});
+
+  $('flipY').onchange=e=>{view.flipY=e.target.checked;renderPreview();};
+  $('showFrames').onchange=e=>{view.showFrames=e.target.checked;renderPreview();};
+  $('weight').oninput=e=>{view.weight=+e.target.value;renderPreview();};
+  document.querySelectorAll('input[name=cmode]').forEach(r=>r.onchange=e=>{view.colorMode=e.target.value;renderPreview();});
+  document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}
+    else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();} });
+  const tfDx=$('tfDx'),tfDy=$('tfDy'),tfScale=$('tfScale'),tfRot=$('tfRot'),tfFlipX=$('tfFlipX'),tfFlipY=$('tfFlipY'),tfPmul=$('tfPmul'),tfPadd=$('tfPadd'),tfZadd=$('tfZadd');
+
+  function newBlank(){ doc.tree={prelude:[],strokes:[],trailing:[]}; selSet.clear(); selected=-1; cursorFrame=-1; view.panX=0; view.panY=0;
+    history.length=0; future.length=0; updateUndo(); afterChange(); zoomToFit(); currentName='untitled'; msg('New blank document'); }
+  function newDemo(){ doc.tree=parseXST(demo()).tree; selSet.clear(); selected=-1; cursorFrame=-1; view.panX=0; view.panY=0;
+    history.length=0; future.length=0; updateUndo(); afterChange(); zoomToFit(); currentName='untitled'; msg('Loaded demo strokes'); }
+
+  function demo(){
+    // A single, well-formed calligraphic stroke: a tapered horizontal brush stroke
+    // (橫, "silkworm head" entry -> full belly -> "swallow-tail" exit). Pressure profile
+    // rises from 0 (brush-down), swells, then tapers back to 0 (brush-up) so the
+    // preview shows a real brush shape rather than a scribble.
+    const lines=[];
+    lines.push("# Stroke File (XST Editor demo) — a single tapered 橫 stroke");
+    lines.push("' Demo 橫");
+    lines.push("w 0.09"); lines.push("C 4.00000"); lines.push("B 2.5");
+    lines.push("e 0.00000"); lines.push("k 0.00000");
+    for(let i=0;i<9;i++) lines.push("l "+i+" 18 20 26");
+    lines.push("a 0.00000 0.00000"); lines.push("a 1.00000 0.00000");
+    lines.push("a 2.00000 0.00000"); lines.push("a 3.00000 0.00000");
+    lines.push("b 0.01 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.01 0 0 0 0");
+    // geometry: a gentle horizontal stroke from x=-0.4 (head) to x=+0.4 (tail), slight dip then rise
+    const N=40;
+    for(let i=0;i<=N;i++){
+      const t=i/N;                       // 0..1 along the stroke
+      const x=-0.40 + 0.80*t;
+      // slight vertical bow: dips in the middle (calligraphic belly)
+      const y=-0.02 - 0.10*Math.sin(Math.PI*t);
+      const z=0.02*Math.sin(2*Math.PI*t);
+      // tapered pressure: 0 at ends, ~1 in the middle (brush-down at i=0, brush-up at i=N)
+      const p=Math.sin(Math.PI*t);       // 0 at t=0/1, peaks 1 at center
+      const pressure=Math.max(0, Math.round(p*10)/10);
+      lines.push("s "+x.toFixed(5)+" "+y.toFixed(5)+" "+z.toFixed(5)+" 0 0 0 "+pressure.toFixed(1));
+    }
+    lines.push("s 0.40 -0.02 0.00000 0 0 0 0"); // explicit trailing brush-up
+    return lines.join("\n")+"\n";
+  }
+
+  // Start with an empty document (no demo strokes on launch).
+  doc.tree={prelude:[],strokes:[],trailing:[]};
+  afterChange();
+})();
+}
+
+  /* ---------- collapsible side panels ---------- */
+  const COLLAPSE_KEY='xst-panel-collapse';
+  function loadCollapse(){ try{ return JSON.parse(localStorage.getItem(COLLAPSE_KEY))||{}; }catch(e){ return {}; } }
+  function saveCollapse(st){ try{ localStorage.setItem(COLLAPSE_KEY, JSON.stringify(st)); }catch(e){} }
+  let panelCollapse = loadCollapse(); // {leftCol:true, rightCol:true}
+  function applyLayout(){
+    const lc = panelCollapse.leftCol ? '30px' : '300px';
+    const rc = panelCollapse.rightCol ? '30px' : '340px';
+    document.querySelector('main').style.gridTemplateColumns = 'minmax(560px,1fr) '+lc+' '+rc;
+    const lEl=document.getElementById('leftCol'), rEl=document.getElementById('rightCol');
+    if(lEl) lEl.classList.toggle('collapsed', !!panelCollapse.leftCol);
+    if(rEl) rEl.classList.toggle('collapsed', !!panelCollapse.rightCol);
+  }
+  document.querySelectorAll('.panel-head').forEach(h=>{
+    h.addEventListener('click', ()=>{ const id=h.dataset.collapse; panelCollapse[id]=!panelCollapse[id]; saveCollapse(panelCollapse); applyLayout(); });
+  });
+  applyLayout();
+
+</script>
+</body>
+</html>

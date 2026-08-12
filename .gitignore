@@ -1,0 +1,13 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (only used for local headless verification; not part of the app)
+node_modules/
+package.json
+package-lock.json
+
+# Local temp verification scripts
+hermes-*.js
+hermes-*.cjs
