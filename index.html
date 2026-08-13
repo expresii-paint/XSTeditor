@@ -1169,26 +1169,79 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       {id:'l', x:x0, y:cy}, {id:'r', x:x1, y:cy}
     ];
     out += '<g>';
+    // draggable nodes = black double-ended arrows on transparent background (Inkscape style)
+    const P1 = n => n.toFixed(1);
+    const ICON = '#111';           // near-black ink
+    const ICON_SIZE = 7.5;         // half-length of arrows / arc radius (a bit bigger)
+    const HIT = 11;                // transparent grab radius (a bit bigger)
+    // double-headed straight arrow along angle `ang` (deg), centred at (cx2,cy2)
+    function dblArrow(cx2,cy2,ang,size){
+      const a=ang*Math.PI/180, s=Math.sin(a), c=Math.cos(a);
+      const rt=(rx,ry)=>[cx2+rx*c-ry*s, cy2+rx*s+ry*c];
+      const L=size, head=3.6;
+      const p1=rt(-L,0), p2=rt(L,0);
+      const tA=rt(-L+head, head*0.8), tB=rt(-L+head, -head*0.8);
+      const hA=rt(L-head, head*0.8),  hB=rt(L-head, -head*0.8);
+      return '<line x1="'+P1(p1[0])+'" y1="'+P1(p1[1])+'" x2="'+P1(p2[0])+'" y2="'+P1(p2[1])+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'
+        +'<line x1="'+P1(tA[0])+'" y1="'+P1(tA[1])+'" x2="'+P1(p1[0])+'" y2="'+P1(p1[1])+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'
+        +'<line x1="'+P1(tB[0])+'" y1="'+P1(tB[1])+'" x2="'+P1(p1[0])+'" y2="'+P1(p1[1])+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'
+        +'<line x1="'+P1(hA[0])+'" y1="'+P1(hA[1])+'" x2="'+P1(p2[0])+'" y2="'+P1(p2[1])+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'
+        +'<line x1="'+P1(hB[0])+'" y1="'+P1(hB[1])+'" x2="'+P1(p2[0])+'" y2="'+P1(p2[1])+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>';
+    }
+    // rotation icon = 90° arc with arrowheads at BOTH ends (consistent tangential sense;
+    // each arrowhead pulled back by a small GAP so its barbs don't touch/overlap the arc)
+    function rotIcon(cx2,cy2,size){
+      const Rr=size, n=20, sweep=90; let pts=[];
+      for(let i=0;i<=n;i++){ const th=(sweep*i/n)*Math.PI/180; pts.push([cx2+Rr*Math.sin(th), cy2-Rr*Math.cos(th)]); }
+      const segs=pts.map(p=>P1(p[0])+','+P1(p[1])).join(' ');
+      const p0=pts[0], p1=pts[1], pNm=pts[n-1], pNe=pts[n];
+      const GAP=2.0, HEAD=3.6;
+      // one arrowhead at an arc end; tip shifted back along travel by GAP so it clears the arc
+      function arrowAt(tip, prev, dirSign){
+        const dx=tip[0]-prev[0], dy=tip[1]-prev[1], l=Math.hypot(dx,dy)||1;
+        const ux=dx/l, uy=dy/l;            // travel direction (tangent)
+        const px=-uy, py=ux;               // perpendicular
+        const tx=tip[0]+dirSign*GAP*ux, ty=tip[1]+dirSign*GAP*uy;  // pulled-back tip
+        const b1=[tx-HEAD*ux+HEAD*0.7*px, ty-HEAD*uy+HEAD*0.7*py];
+        const b2=[tx-HEAD*ux-HEAD*0.7*px, ty-HEAD*uy-HEAD*0.7*py];
+        return '<line x1="'+P1(b1[0])+'" y1="'+P1(b1[1])+'" x2="'+P1(tx)+'" y2="'+P1(ty)+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'
+             + '<line x1="'+P1(b2[0])+'" y1="'+P1(b2[1])+'" x2="'+P1(tx)+'" y2="'+P1(ty)+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>';
+      }
+      const aS = arrowAt(p0, p1, -1);     // start: travel p0->p1, tip pulled back
+      const aE = arrowAt(pNe, pNm, +1);    // end:   travel pNm->pNe, tip pulled forward
+      return '<polyline points="'+segs+'" fill="none" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>' + aS + aE;
+    }
+    function drawNode(cx2,cy2,cls,dataId,arrows,useRot,extraClass,cursorStyle,rotDeg){
+      let inner = useRot ? rotIcon(cx2,cy2,ICON_SIZE) : arrows.map(a=>dblArrow(cx2,cy2,a,ICON_SIZE)).join('');
+      if(rotDeg) inner = '<g transform="rotate('+rotDeg+' '+P1(cx2)+' '+P1(cy2)+')">'+inner+'</g>';
+      return '<g class="ef-handle '+cls+(extraClass?' '+extraClass:'')+'" data-handle="'+dataId+'"'+(cursorStyle?' style="cursor:'+cursorStyle+'"':'')+' pointer-events="all">'
+        + inner
+        + '<circle cx="'+P1(cx2)+'" cy="'+P1(cy2)+'" r="'+HIT+'" fill="transparent" pointer-events="all"/>'
+        + '</g>';
+    }
+    const CORNER_ROT = { tl:0, tr:90, br:180, bl:270 };
     if(interactionMode === 'scale'){
-      // ---- scale mode: 8 resize handles + 1 red rotation handle ----
+      // ---- scale mode: 8 resize handles (double-headed arrows along drag axis) ----
       for(const c of corners){
-        // diagonal cursor depends on which screen diagonal the corner sits on
-        const cursor = (c.id==='tl'||c.id==='br') ? 'nwse-resize' : 'nesw-resize';
-        out += '<rect class="ef-handle ef-corner" data-handle="'+c.id+'" x="'+(c.x-hs/2)+'" y="'+(c.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#36c" stroke="#fff" stroke-width="1" cursor="'+cursor+'" pointer-events="all"/>';
+        const diag = Math.atan2(c.y-cy, c.x-cx)*180/Math.PI;
+        const cur = (c.id==='tl'||c.id==='br') ? 'nwse-resize' : 'nesw-resize';
+        out += drawNode(c.x,c.y,'ef-corner',c.id,[diag,diag+180],false,'',cur);
       }
       for(const e of edges){
-        const cursor = (e.id==='t'||e.id==='b') ? 'ns-resize' : 'ew-resize';
-        out += '<rect class="ef-handle ef-edge" data-handle="'+e.id+'" x="'+(e.x-hs/2)+'" y="'+(e.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#36c" stroke="#fff" stroke-width="1" cursor="'+cursor+'" pointer-events="all"/>';
+        const ang = (e.id==='t'||e.id==='b') ? [90,270] : [0,180];
+        const cur = (e.id==='t'||e.id==='b') ? 'ns-resize' : 'ew-resize';
+        out += drawNode(e.x,e.y,'ef-edge',e.id,ang,false,'',cur);
       }
       out += '<text x="'+cx+'" y="'+(y1+14)+'" text-anchor="middle" fill="#36c" font-size="11" font-family="monospace" pointer-events="none">scale handles · Ctrl = aspect lock, Shift = centre fixed · click a stroke to switch to rotate</text>';
     } else {
-      // ---- rotate mode: corners rotate (around centre), edges shear (around opposite edge) ----
+      // ---- rotate mode: corners rotate (arc with both ends arrowed), edges shear (arrows) ----
       for(const c of corners){
-        out += '<rect class="ef-handle ef-corner ef-rot-rotate" data-handle="'+c.id+'" x="'+(c.x-hs/2)+'" y="'+(c.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#d33" stroke="#fff" stroke-width="1" pointer-events="all"/>';
+        out += drawNode(c.x,c.y,'ef-corner',c.id,[],true,'ef-rot-rotate',CORNER_ROT[c.id]);
       }
       for(const e of edges){
-        const cursor = (e.id==='t'||e.id==='b') ? 'ef-shear-lr' : 'ef-shear-ud';
-        out += '<rect class="ef-handle ef-edge '+cursor+'" data-handle="'+e.id+'" x="'+(e.x-hs/2)+'" y="'+(e.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#e90" stroke="#fff" stroke-width="1" pointer-events="all"/>';
+        const ang = (e.id==='t'||e.id==='b') ? [0,180] : [90,270];
+        const cls = (e.id==='t'||e.id==='b') ? 'ef-shear-lr' : 'ef-shear-ud';
+        out += drawNode(e.x,e.y,'ef-edge',e.id,ang,false,cls,'');
       }
       out += '<text x="'+cx+'" y="'+(y1+14)+'" text-anchor="middle" fill="#d33" font-size="11" font-family="monospace" pointer-events="none">rotate · corners rotate, edges shear · click a stroke to switch back</text>';
     }
@@ -1387,7 +1440,6 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     }
     if(dragMode==='stroke'){
       // pure click on a selected stroke (no drag): if it was an already-selected stroke,
-      // toggle the Inkscape-like interaction mode (scale <-> rotate handles).
       if(!moved && clickSelectedToggle && downSi>=0 && !additive){
         interactionMode = (interactionMode === 'scale') ? 'rotate' : 'scale';
         renderAll();
