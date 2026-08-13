@@ -13,6 +13,10 @@
     --good:#5fd08a; --bad:#ff6b6b; --sel:#33415c;
   }
   *{box-sizing:border-box}
+  /* edit-frame handle cursors (rotate mode) */
+  .ef-rot-rotate{cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><g fill='none' stroke='%23fff' stroke-width='2'><circle cx='14' cy='14' r='9'/><path d='M14 5 A9 9 0 0 1 22 13' fill='%23ffb454' stroke='%23ffb454'/><path d='M22 13 l-3 -2 m3 2 l-2 3'/><path d='M14 23 A9 9 0 0 1 6 15' fill='%23ffb454' stroke='%23ffb454'/><path d='M6 15 l3 2 m-3 -2 l2 -3'/></g></svg>") 14 14, grab;}
+  .ef-shear-ud{cursor:ns-resize;}
+  .ef-shear-lr{cursor:ew-resize;}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
     font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);
@@ -578,10 +582,10 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   }
   function selectLayer(L){ selectedLayer=(selectedLayer===L?-1:L); renderAll(); }
 
-  function selectStroke(si){ if(si==null||si<0){ selSet.clear(); } else { selSet.clear(); selSet.add(si); } selected=si; cursorFrame=doc.tree.strokes[si]?0:-1; renderAll(); }
-  function toggleStroke(si){ if(selSet.has(si)){ selSet.delete(si); if(selected===si) selected=selSet.size?Math.max(...selSet):(doc.tree.strokes[si]?si:-1); } else { selSet.add(si); selected=si; } cursorFrame=doc.tree.strokes[si]?0:-1; renderAll(); }
-  function setSelection(arr){ selSet.clear(); arr.forEach(i=>selSet.add(i)); selected=arr.length?arr[arr.length-1]:-1; cursorFrame=selected>=0 && doc.tree.strokes[selected]?0:-1; renderAll(); }
-  function clearSelection(){ selSet.clear(); selected=-1; cursorFrame=-1; renderAll(); }
+  function selectStroke(si){ if(si==null||si<0){ selSet.clear(); } else { selSet.clear(); selSet.add(si); } selected=si; cursorFrame=doc.tree.strokes[si]?0:-1; interactionMode='scale'; renderAll(); }
+  function toggleStroke(si){ if(selSet.has(si)){ selSet.delete(si); if(selected===si) selected=selSet.size?Math.max(...selSet):(doc.tree.strokes[si]?si:-1); } else { selSet.add(si); selected=si; } cursorFrame=doc.tree.strokes[si]?0:-1; interactionMode='scale'; renderAll(); }
+  function setSelection(arr){ selSet.clear(); arr.forEach(i=>selSet.add(i)); selected=arr.length?arr[arr.length-1]:-1; cursorFrame=selected>=0 && doc.tree.strokes[selected]?0:-1; interactionMode='scale'; renderAll(); }
+  function clearSelection(){ selSet.clear(); selected=-1; cursorFrame=-1; interactionMode='scale'; renderAll(); }
 
   function moveStroke(si,dir){
     const a=doc.tree.strokes, nj=si+dir; if(nj<0||nj>=a.length) return;
@@ -1057,6 +1061,12 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   //  * drag on empty canvas   -> rubber-band marquee (select intersecting strokes)
   //  * right-drag             -> pan
   let dragMode='none', dragSi=-1, startX=0, startY=0, lastX=0, lastY=0, moved=false, downSi=-1, additive=false;
+  let clickSelectedToggle=false; // true when mousedown was on an already-selected stroke (candidate to toggle interaction mode on click)
+  // Inkscape-like handle interaction: 'scale' shows resize handles + rotation handle;
+  // 'rotate' swaps so the 4 corners rotate (around the selection centre) and the 4 edge
+  // midpoints shear (around the opposite edge). Clicking a selected stroke toggles it.
+  let interactionMode='scale';
+
   let editFrameDrag = null; // {mode:'resize'|'rotate', handle:'tl'|'tr'|'bl'|'br'|'t'|'b'|'l'|'r'|'rot', startRect, startAngle, pivot, selIndices[]}
   function toSvg(clientX,clientY){ const r=svgEl.getBoundingClientRect(); const side=Math.min(r.width,r.height)||1; const scale=side/820; const offX=(r.width-side)/2, offY=(r.height-side)/2; return { x:(clientX-r.left-offX)/scale, y:(clientY-r.top-offY)/scale }; }
   // Inverse of the preview mapping: 820-space (SVG user units) -> DATA-space (stroke coords).
@@ -1134,7 +1144,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     if(minX > maxX) return null;
     return {x0: minX, y0: minY, x1: maxX, y1: maxY};
   }
-  const ROT_LEN = 24; // rotation handle distance above the frame's top edge
+  const ROT_LEN = 24; // (unused now — rotation is via corners in rotate mode)
   function drawEditFrame(){
     if(selSet.size < 1) return '';
     const bounds = computeSelectionBounds();
@@ -1142,13 +1152,9 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     const {x0, y0, x1, y1} = bounds;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const w = x1 - x0, h = y1 - y0;
-    const hs = 6; // handle size
-    const rotLen = ROT_LEN; // rotation handle distance from top edge
-    // Frame rect + 8 resize handles + 1 rotation handle
-    // IMPORTANT: the bounding rectangle must NOT capture clicks (otherwise clicking a
-    // stroke *inside* the frame hits the rect and starts a marquee instead of grabbing
-    // the stroke). Handles use pointer-events:all explicitly; the rect uses none, and the
-    // group wrapper carries no global pointer-events so strokes below stay clickable.
+    const hs = 10; // handle size (larger for easier grabbing)
+    // Frame rect + handles. The bounding rectangle must NOT capture clicks (so clicking a
+    // stroke inside the frame grabs the stroke, not the rect). Handles use pointer-events:all.
     let out = '<g class="edit-frame">';
     // bounding rectangle — transparent to clicks, just visual
     out += '<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="none" stroke="#36c" stroke-width="1.5" stroke-dasharray="4 4" pointer-events="none"/>';
@@ -1163,28 +1169,29 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       {id:'l', x:x0, y:cy}, {id:'r', x:x1, y:cy}
     ];
     out += '<g>';
-    for(const c of corners){
-      out += '<rect class="ef-handle ef-corner" data-handle="'+c.id+'" x="'+(c.x-hs/2)+'" y="'+(c.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#36c" stroke="#fff" stroke-width="1" cursor="nwse-resize" pointer-events="all"/>';
+    if(interactionMode === 'scale'){
+      // ---- scale mode: 8 resize handles + 1 red rotation handle ----
+      for(const c of corners){
+        // diagonal cursor depends on which screen diagonal the corner sits on
+        const cursor = (c.id==='tl'||c.id==='br') ? 'nwse-resize' : 'nesw-resize';
+        out += '<rect class="ef-handle ef-corner" data-handle="'+c.id+'" x="'+(c.x-hs/2)+'" y="'+(c.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#36c" stroke="#fff" stroke-width="1" cursor="'+cursor+'" pointer-events="all"/>';
+      }
+      for(const e of edges){
+        const cursor = (e.id==='t'||e.id==='b') ? 'ns-resize' : 'ew-resize';
+        out += '<rect class="ef-handle ef-edge" data-handle="'+e.id+'" x="'+(e.x-hs/2)+'" y="'+(e.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#36c" stroke="#fff" stroke-width="1" cursor="'+cursor+'" pointer-events="all"/>';
+      }
+      out += '<text x="'+cx+'" y="'+(y1+14)+'" text-anchor="middle" fill="#36c" font-size="11" font-family="monospace" pointer-events="none">scale handles · Ctrl = aspect lock, Shift = centre fixed · click a stroke to switch to rotate</text>';
+    } else {
+      // ---- rotate mode: corners rotate (around centre), edges shear (around opposite edge) ----
+      for(const c of corners){
+        out += '<rect class="ef-handle ef-corner ef-rot-rotate" data-handle="'+c.id+'" x="'+(c.x-hs/2)+'" y="'+(c.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#d33" stroke="#fff" stroke-width="1" pointer-events="all"/>';
+      }
+      for(const e of edges){
+        const cursor = (e.id==='t'||e.id==='b') ? 'ef-shear-lr' : 'ef-shear-ud';
+        out += '<rect class="ef-handle ef-edge '+cursor+'" data-handle="'+e.id+'" x="'+(e.x-hs/2)+'" y="'+(e.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#e90" stroke="#fff" stroke-width="1" pointer-events="all"/>';
+      }
+      out += '<text x="'+cx+'" y="'+(y1+14)+'" text-anchor="middle" fill="#d33" font-size="11" font-family="monospace" pointer-events="none">rotate · corners rotate, edges shear · click a stroke to switch back</text>';
     }
-    for(const e of edges){
-      const cursor = (e.id==='t'||e.id==='b') ? 'ns-resize' : 'ew-resize';
-      out += '<rect class="ef-handle ef-edge" data-handle="'+e.id+'" x="'+(e.x-hs/2)+'" y="'+(e.y-hs/2)+'" width="'+hs+'" height="'+hs+'" fill="#36c" stroke="#fff" stroke-width="1" cursor="'+cursor+'" pointer-events="all"/>';
-    }
-    // rotation handle. When a rotation drag is in progress, the handle tracks the live
-    // mouse angle around the pivot so it stays under the cursor; otherwise it rests a
-    // fixed distance above the frame's top-center.
-    let rx = cx, ry = y0 - rotLen;
-    if(editFrameDrag && editFrameDrag.mode==='rotate'){
-      // Red handle tracks the live cursor: radius = distance from pivot to cursor, so the
-      // handle sits exactly under the mouse while rotating.
-      const p = editFrameDrag.pivotScreen, cur = editFrameDrag.handleCur;
-      const rad = Math.max(1, Math.hypot(cur.x - p.x, cur.y - p.y));
-      const ang = Math.atan2(cur.y - p.y, cur.x - p.x);
-      rx = p.x + Math.cos(ang)*rad;
-      ry = p.y + Math.sin(ang)*rad;
-    }
-    out += '<line x1="'+cx+'" y1="'+y0+'" x2="'+rx+'" y2="'+ry+'" stroke="#36c" stroke-width="1.5" stroke-dasharray="2 2" pointer-events="none"/>';
-    out += '<circle class="ef-handle ef-rot" data-handle="rot" cx="'+rx+'" cy="'+ry+'" r="'+hs+'" fill="#d33" stroke="#fff" stroke-width="1" cursor="grab" pointer-events="all"/>';
     out += '</g></g>';
     return out;
   }
@@ -1205,22 +1212,35 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
         const cx = (bounds.x0 + bounds.x1) / 2, cy = (bounds.y0 + bounds.y1) / 2;
         // PIVOT in DATA space — used for actual coordinate transforms
         const pd = svgToData(cx, cy);
+        // Data-space bounds + edge midpoints (for shear anchoring)
+        const dTL=svgToData(bounds.x0,bounds.y0), dBR=svgToData(bounds.x1,bounds.y1);
+        const dataBounds={x0:dTL.x,y0:dTL.y,x1:dBR.x,y1:dBR.y};
+        dataBounds.cx=(dataBounds.x0+dataBounds.x1)/2; dataBounds.cy=(dataBounds.y0+dataBounds.y1)/2;
         // Snapshot ORIGINAL stroke coordinates (so each drag starts from the unmodified geometry)
         const orig = {};
         for(const si of selSet){
           orig[si] = doc.tree.strokes[si].frames.map(f => ({x: f.x, y: f.y}));
         }
+        // Decide the drag mode from the current interaction mode + which handle was grabbed.
+        let mode;
+        if(interactionMode === 'rotate'){
+          mode = (handle==='tl'||handle==='tr'||handle==='bl'||handle==='br') ? 'rotate' : 'shear';
+        } else {
+          // scale mode: all handles resize (corners, edges). Rotation is via rotate mode.
+          mode = 'resize';
+        }
         editFrameDrag = {
-          mode: handle === 'rot' ? 'rotate' : 'resize',
+          mode,
           handle,
           startRect: {...bounds},            // screen-space bounds (820)
           pivotScreen: {x: cx, y: cy},       // screen-space pivot
           pivotData: pd,                     // data-space pivot
+          dataBounds,                        // data-space bounds + edge midpoints
           orig,                              // original frame coords keyed by stroke index
           selIndices: Array.from(selSet),
           handleCur: {x: cx, y: bounds.y0 - ROT_LEN}     // live mouse position in 820-space (init at rest handle)
         };
-        svgEl.style.cursor = handle === 'rot' ? 'grabbing' : (handle==='t'||handle==='b' ? 'ns-resize' : handle==='l'||handle==='r' ? 'ew-resize' : 'nwse-resize');
+        svgEl.style.cursor = mode==='rotate' ? 'grabbing' : (mode==='shear' ? 'grabbing' : (handle==='t'||handle==='b' ? 'ns-resize' : handle==='l'||handle==='r' ? 'ew-resize' : 'nwse-resize'));
         pushHistory();
         e.stopPropagation();
         return;
@@ -1229,6 +1249,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     const g=e.target.closest('.stroke-g');
     downSi = g ? (+g.dataset.si) : -1;
     additive = e.shiftKey||e.ctrlKey||e.metaKey;
+    clickSelectedToggle = false;
     startX=e.clientX; startY=e.clientY; lastX=e.clientX; lastY=e.clientY; moved=false;
     if(e.button===2){ // right-drag pans
       dragMode='pan'; svgEl.style.cursor='grabbing'; return;
@@ -1240,7 +1261,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     }
     if(downSi>=0){
       if(!selSet.has(downSi)){ selectStroke(downSi); } // unselected stroke -> select it, then drag just it
-      else if(!additive){ /* already in selection, no modifier -> drag the WHOLE selection, keep it */ }
+      else if(!additive){ clickSelectedToggle = true; /* already selected, no modifier -> toggling interaction mode on click (mouseup, if no drag) */ }
       dragMode='stroke'; dragSi=downSi; svgEl.style.cursor='move'; pushHistory();
     } else {
       dragMode='marquee'; // rubber-band; may become a plain empty click on mouseup
@@ -1269,22 +1290,65 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
             frs[i].changed = true;
           }
         }
+      } else if(st.mode==='shear'){
+        // Shear (skew) around the OPPOSITE edge: the dragged edge follows the cursor, the
+        // opposite edge stays fixed. Pure affine, baked into x/y.
+        const db = st.dataBounds;
+        const ptr = svgToData(b.x, b.y);
+        let edgeY, anchorY, edgeMidX, edgeMidY, edgeX, anchorX;
+        if(handle==='t'){ edgeY=db.y0; anchorY=db.y1; edgeMidX=db.cx; edgeMidY=db.y0; }
+        else if(handle==='b'){ edgeY=db.y1; anchorY=db.y0; edgeMidX=db.cx; edgeMidY=db.y1; }
+        else if(handle==='l'){ edgeX=db.x0; anchorX=db.x1; edgeMidX=db.x0; edgeMidY=db.cy; }
+        else { edgeX=db.x1; anchorX=db.x0; edgeMidX=db.x1; edgeMidY=db.cy; }
+        for(const si of st.selIndices){
+          const orig = st.orig[si];
+          const frs = doc.tree.strokes[si].frames;
+          for(let i=0; i<frs.length; i++){
+            if(handle==='t'||handle==='b'){
+              const dx = ptr.x - edgeMidX;                       // edge displacement in x
+              const denom = (anchorY - edgeY) || 1e-6;           // signed: factor is 1 at the dragged edge, 0 at the anchor (flip-independent)
+              const f = (anchorY - orig[i].y) / denom;
+              frs[i].x = orig[i].x + dx * f;
+            } else {
+              const dy = ptr.y - edgeMidY;
+              const denom = (anchorX - edgeX) || 1e-6;
+              const f = (anchorX - orig[i].x) / denom;
+              frs[i].y = orig[i].y + dy * f;
+            }
+            frs[i].changed = true;
+          }
+        }
       } else {
         // Resize: scale factors from screen-space pointer & bounds.
-        // For 't'/'l' handles use the OPPOSITE edge as the fixed anchor.
+        // Default: the OPPOSITE edge is the fixed anchor (so the dragged edge follows the cursor).
+        // Ctrl/Cmd held  -> uniform aspect ratio (sx == sy).
+        // Shift held     -> keep the selection CENTRE fixed (anchor = pivot/centre).
         const bx0 = st.startRect.x0, by0 = st.startRect.y0, bx1 = st.startRect.x1, by1 = st.startRect.y1;
+        const bw = (bx1 - bx0) || 1, bh = (by1 - by0) || 1;
+        const keepCenter = e.shiftKey;
+        const keepAspect = e.ctrlKey || e.metaKey;
         let sx = 1, sy = 1;
-        if(handle.indexOf('r') >= 0) sx = (b.x - bx0) / (bx1 - bx0);
-        if(handle.indexOf('l') >= 0) sx = (bx1 - b.x) / (bx1 - bx0);
-        if(handle.indexOf('b') >= 0) sy = (b.y - by0) / (by1 - by0);
-        if(handle.indexOf('t') >= 0) sy = (by1 - b.y) / (by1 - by0);
+        if(handle.indexOf('r') >= 0) sx = (b.x - bx0) / bw;
+        if(handle.indexOf('l') >= 0) sx = (bx1 - b.x) / bw;
+        if(handle.indexOf('b') >= 0) sy = (b.y - by0) / bh;
+        if(handle.indexOf('t') >= 0) sy = (by1 - b.y) / bh;
         sx = Math.max(0.01, sx); sy = Math.max(0.01, sy);
-        // Fixed anchor point (the edge opposite the dragged handle), in data-space.
+        if(keepAspect){
+          // uniform scale: pick the factor along the axis the handle primarily controls
+          let s;
+          if(handle.length === 2) s = Math.max(sx, sy); // corner: follow the dominant axis
+          else if(handle.indexOf('r') >= 0 || handle.indexOf('l') >= 0) s = sx; // horizontal handle
+          else s = sy; // vertical handle
+          sx = s; sy = s;
+        }
+        // Fixed anchor in data-space. Centre lock overrides the opposite-edge anchor.
         let anchorX = pivotData.x, anchorY = pivotData.y;
-        if(handle.indexOf('r') >= 0) anchorX = svgToData(bx0, 0).x;
-        if(handle.indexOf('l') >= 0) anchorX = svgToData(bx1, 0).x;
-        if(handle.indexOf('b') >= 0) anchorY = svgToData(0, by0).y;
-        if(handle.indexOf('t') >= 0) anchorY = svgToData(0, by1).y;
+        if(!keepCenter){
+          if(handle.indexOf('r') >= 0) anchorX = svgToData(bx0, 0).x;
+          if(handle.indexOf('l') >= 0) anchorX = svgToData(bx1, 0).x;
+          if(handle.indexOf('b') >= 0) anchorY = svgToData(0, by0).y;
+          if(handle.indexOf('t') >= 0) anchorY = svgToData(0, by1).y;
+        }
         for(const si of st.selIndices){
           const orig = st.orig[si];
           const frs = doc.tree.strokes[si].frames;
@@ -1322,8 +1386,14 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       return;
     }
     if(dragMode==='stroke'){
+      // pure click on a selected stroke (no drag): if it was an already-selected stroke,
+      // toggle the Inkscape-like interaction mode (scale <-> rotate handles).
+      if(!moved && clickSelectedToggle && downSi>=0 && !additive){
+        interactionMode = (interactionMode === 'scale') ? 'rotate' : 'scale';
+        renderAll();
+      }
       // pure click on a selected stroke (no drag) collapses a multi-selection to just it
-      if(!moved && selSet.size>1 && downSi>=0 && !additive){ selectStroke(downSi); }
+      else if(!moved && selSet.size>1 && downSi>=0 && !additive){ selectStroke(downSi); }
     } else if(dragMode==='marquee'){
       hideMarquee();
       if(moved){

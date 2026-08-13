@@ -20,9 +20,17 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
     (segment intersection), so a long slanted stroke is *not* grabbed just because its
     bounding box overlaps the drag.
 - **Move** one or many selected strokes together; right-drag to pan.
-- **Edit frame** around the selection with 8 resize handles + a red rotation handle
-  (drag the red handle to rotate around the selection's centre; it follows the cursor).
-- **Edit frames** directly in the side table (x, y, z, pitch, roll, turn, pressure).
+- **Transform** a selection with an Inkscape-like two-mode handle set. Click a *selected*
+  stroke (without dragging) to toggle between:
+  - **Scale mode** (default): 8 resize handles for scaling around the opposite edge/centre.
+  - **Rotate mode**: the 4 **corner** handles become rotation handles (drag to rotate around
+    the centre), and the 4 **edge-midpoint** handles become **shear** handles (drag to skew
+    around the opposite edge). Click a selected stroke again to switch back.
+  Transforms are baked into the stroke coordinates, so they apply on **Save** and
+  **Send selected**. The transform panel also exposes numeric translate / scale / rotate /
+  flip / pressure fields for the single selected stroke.
+- **Edit** per-frame coordinates in the frames table (x, y, z, pitch, roll, turn, pressure);
+  insert/delete the cursor frame.
 - **Layers** panel (reflects the file's `L` layer commands).
 - **Save** via a dialog (filename + path; native picker where supported, with a
   download fallback). Untouched lines are preserved byte-for-byte; edited strokes save
