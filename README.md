@@ -49,6 +49,34 @@ No build step, no server, no CDN. Just open `index.html` in a browser.
 - All coordinate math is done in data space; the preview mapping is inverted for
   mouse interaction, including cursor-anchored zoom and Y-flip.
 
+## Sending strokes to Expresii Paint
+
+The editor can drive a running **Expresii Paint** instance over its local Web API
+(enabled in Expresii via *Enable Web API* / *Start Stroke Server*, default port 9000).
+
+- Set the server address in the **Expresii** box on the toolbar (default `http://localhost:9000`).
+- **Ping** checks the server is reachable (`GET /info`).
+- **Send all** sends every stroke (the full, edited document) as one XST command set.
+- **Send selected** sends only the currently selected strokes.
+- **Per-stroke brush:** when a single stroke is selected, the *Selected stroke* panel has a
+  **Brush — this stroke** section (wetness `w`, size `B`, scratch `i`). These write a
+  per-stroke override into that stroke's own config block, so they take effect on **Save** and
+  **Send selected** and override the document-wide *Global parameters*. Leave a field blank to
+  fall back to the global value. (Recorded `.xst` files often already carry their own `w`/`B`/`i`
+  per stroke, which is why editing the global *wetness/size* alone didn't change a specific
+  stroke — use this per-stroke control for that.)
+
+Both buttons `POST` the XST text as a multipart `message` field to `/confirm-ajax`,
+then poll `/result/{id}` and show the rendered PNG in a result dialog. The selected/all
+text is re-serialized from the live (edited) tree, so moves/resizes/rotations you made
+are included. Strokes are sent in Expresii's own world coordinates, so they paint exactly
+as recorded — no coordinate conversion needed.
+
+Note: the editor is a static file, so open it from `file://` or any local server; the
+`/confirm-ajax` (multipart) and `/info` (GET) calls are CORS-permitted by the Expresii
+server, so cross-origin use works. If Expresii isn't reachable you'll get a clear hint to
+enable its Web API.
+
 ## License
 
 See the repository for license terms.

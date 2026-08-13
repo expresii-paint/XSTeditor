@@ -129,6 +129,12 @@
   .modal .path{color:var(--accent2);font-size:11px;word-break:break-all;min-height:14px}
   .modal .hint{color:var(--dim);font-size:11px}
   .modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+  .expresii-group{display:flex;align-items:center;gap:6px}
+  .expresii-group .expresii-label{color:var(--dim);font-size:12px}
+  .expresii-group input{width:150px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;color:var(--txt);padding:4px 6px;font-size:12px}
+  .sep{width:1px;height:22px;background:var(--line)}
+  #expresiiImg{max-width:100%;max-height:56vh;border:1px solid var(--line);background:#fff;border-radius:4px}
+  #expresiiStatus{font-size:12px;color:var(--dim);margin:8px 0;min-height:16px;white-space:pre-wrap}
 </style>
 </head>
 <body>
@@ -149,6 +155,14 @@
   <button id="saveBtn">Save (download)</button>
   <button id="undoBtn" title="Ctrl+Z">Undo</button>
   <button id="redoBtn" title="Ctrl+Y">Redo</button>
+  <span class="sep"></span>
+  <span class="expresii-group">
+    <span class="expresii-label">Expresii</span>
+    <input id="expresiiAddr" type="text" spellcheck="false" value="http://localhost:9000" title="Expresii Web API address (default port 9000)">
+    <button id="expresiiTest" title="Check the server is reachable">Ping</button>
+    <button id="sendAll" title="Send every stroke to Expresii Paint">Send all</button>
+    <button id="sendSel" class="primary" title="Send only the selected strokes to Expresii Paint">Send selected</button>
+  </span>
   <span class="spacer"></span>
   <span class="pill" id="statPill">no file</span>
   <input id="fileInput" type="file" accept=".xst,.txt,text/plain" class="hidden" style="display:none">
@@ -238,6 +252,11 @@
                 <button id="insFrame">+ Frame after cursor</button>
                 <button id="delFrame" class="danger">Delete cursor frame</button>
               </div>
+              <div class="field" style="margin-top:10px"><label>Brush — this stroke</label></div>
+              <div class="field"><label>Wetness w</label><input id="bsW" type="number" min="0.01" max="1" step="0.01" style="width:84px"></div>
+              <div class="field"><label>Size B</label><input id="bsB" type="number" min="0.1" max="50" step="0.1" style="width:84px"></div>
+              <div class="field"><label>Scratch i</label><input id="bsI" type="number" min="0" max="1" step="0.01" style="width:84px"></div>
+              <div class="hint" id="bsHint">Per-stroke override of the global brush. Blank = use global. Applied on Save &amp; Send selected.</div>
               <div class="framesScroll">
                 <table class="frames" id="frameTable"></table>
               </div>
@@ -276,6 +295,17 @@
       <button id="saveCancel">Cancel</button>
       <button id="saveNative" class="primary" title="Open the system Save-As dialog">Browse… (system dialog)</button>
       <button id="saveDownload">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="expresiiModal" class="modal-overlay" hidden>
+  <div class="modal">
+    <h3>Send to Expresii — result</h3>
+    <div id="expresiiStatus"></div>
+    <img id="expresiiImg" alt="Expresii render result">
+    <div class="actions">
+      <button id="expresiiClose" class="primary">Close</button>
     </div>
   </div>
 </div>
@@ -414,6 +444,22 @@ function setScalar(tree,cmd,val){
   let o=findScalar(tree,cmd);
   if(!o){ o={type:'scalar',cmd,value:val,changed:true}; tree.prelude.unshift(o); }
   else o.value=val;
+}
+// Stroke-scoped brush scalars live in each stroke's `config` array (so a stroke can
+// override the document-wide globals). These mirror findScalar/setScalar but on a stroke.
+function findStrokeScalar(s,cmd){
+  if(!s||!s.config) return null;
+  for(const o of s.config) if(o.type==='scalar'&&o.cmd===cmd) return o;
+  return null;
+}
+function setStrokeScalar(s,cmd,val){
+  let o=findStrokeScalar(s,cmd);
+  if(!o){ o={type:'scalar',cmd,value:val,changed:true}; s.config.push(o); }
+  else { o.value=val; o.changed=true; }
+}
+function clearStrokeScalar(s,cmd){
+  if(!s||!s.config) return;
+  s.config=s.config.filter(o=>!(o.type==='scalar'&&o.cmd===cmd));
 }
 function findTitle(tree){
   for(const o of tree.prelude) if(o.type==='title') return o;
@@ -663,6 +709,37 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       inp.addEventListener('input',()=>{ const fi=+inp.dataset.fi,k=inp.dataset.k,v=parseFloat(inp.value);
         if(isNaN(v)) return; const f=s.frames[fi]; if(f){ f[k]=v; f.changed=true; renderPreview(); } });
     });
+    renderStrokeBrush();
+  }
+  // Per-stroke brush override editors (w / B / i). Read from the stroke's own config,
+  // falling back to the document-wide global; write back into the stroke config so the
+  // override travels with Save and Send selected.
+  function renderStrokeBrush(){
+    const s=doc.tree.strokes[selected];
+    const map={ bsW:'w', bsB:'B', bsI:'i' };
+    for(const id in map){
+      const cmd=map[id];
+      const inp=$(id);
+      const g=findStrokeScalar(s,cmd)||findScalar(doc.tree,cmd);
+      if(g && g.value!==undefined && g.value!==null && g.value!==''){ inp.value=g.value; inp.placeholder=''; }
+      else { inp.value=''; inp.placeholder='global'; }
+    }
+  }
+  function wireStrokeBrush(){
+    const map={ bsW:'w', bsB:'B', bsI:'i' };
+    for(const id in map){
+      const cmd=map[id]; const inp=$(id);
+      inp.addEventListener('focus',()=>{ if(!inp._snap){ pushHistory(); inp._snap=true; } });
+      inp.addEventListener('blur',()=>{ inp._snap=false; });
+      inp.addEventListener('change',()=>{
+        const s=doc.tree.strokes[selected]; if(!s) return;
+        const v=parseFloat(inp.value);
+        if(inp.value.trim()===''){ clearStrokeScalar(s,cmd); }
+        else if(!isNaN(v)){ setStrokeScalar(s,cmd,v); }
+        else return;
+        afterChange();
+      });
+    }
   }
 
   /* ---------- preview (whole paper) ---------- */
@@ -770,7 +847,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     setZoom(1); view.panX=0; view.panY=0; renderPreview();
   }
   function setZoom(z){ view.zoom=z; $('zoom').value=z; const v=$('zoomVal'); if(v) v.textContent=(Math.round(z*10)/10)+'×'; }
-  function updateStat(){ let f=allFrames().length; const name=currentName&&currentName!=='untitled'?currentName:'(untitled)'; $('statPill').textContent=name+' · '+doc.tree.strokes.length+' strokes · '+f+' frames'; $('saveBtn').disabled = doc.tree.strokes.length===0; }
+  function updateStat(){ let f=allFrames().length; const name=currentName&&currentName!=='untitled'?currentName:'(untitled)'; $('statPill').textContent=name+' · '+doc.tree.strokes.length+' strokes · '+f+' frames'; $('saveBtn').disabled = doc.tree.strokes.length===0; $('sendAll').disabled = doc.tree.strokes.length===0; $('sendSel').disabled = selSet.size===0; }
 
   /* ---------- raw mode ---------- */
   function toRaw(){ $('rawArea').value=emitXST(doc); }
@@ -885,6 +962,76 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   $('saveName').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); saveDownload(); } });
   saveModal.addEventListener('click',e=>{ if(e.target===saveModal) closeSaveDialog(); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !saveModal.hidden) closeSaveDialog(); });
+
+  wireStrokeBrush();   // attach per-stroke brush (w/B/i) editors — static inputs, one-time
+
+  /* ---------- Send to Expresii (HTTP Web API) ---------- */
+  const expresiiModal=$('expresiiModal'), expresiiImg=$('expresiiImg'), expresiiStatus=$('expresiiStatus');
+  let expresiiPollTimer=null, expresiiPollCount=0;
+  function normAddr(a){ a=(a||'').trim().replace(/\/+$/,''); if(!/^https?:\/\//i.test(a)) a='http://'+a; return a; }
+  function buildSendText(which){
+    if(which==='selected'){
+      const idx=[...selSet].sort((a,b)=>a-b);
+      if(!idx.length) return null;
+      const out=[];
+      for(const o of doc.tree.prelude) out.push(emitLine(o));
+      out.push("' XST Editor — selected "+idx.length+" stroke(s)");
+      for(const si of idx){ const s=doc.tree.strokes[si]; for(const o of s.config) out.push(emitLine(o)); for(const o of s.frames) out.push(emitLine(o)); }
+      return out.join('\n');
+    }
+    return emitXST(doc);                 // "all" — the entire current (edited) document
+  }
+  async function sendToExpresii(which){
+    if(doc.tree.strokes.length===0){ msg('Nothing to send (no strokes)'); return; }
+    if(which==='selected' && selSet.size===0){ msg('Select at least one stroke first'); return; }
+    const addr=normAddr($('expresiiAddr').value);
+    const text=buildSendText(which);
+    if(text==null) return;
+    const label=which==='selected' ? ('selected '+selSet.size) : ('all '+doc.tree.strokes.length);
+    expresiiModal.hidden=false; expresiiImg.src=''; expresiiPollCount=0;
+    expresiiStatus.textContent='Sending '+label+' stroke(s) to '+addr+'…';
+    try{
+      const fd=new FormData(); fd.append('message', text);
+      const res=await fetch(addr+'/confirm-ajax',{method:'POST',body:fd});
+      if(!res.ok){ expresiiStatus.textContent='Expresii returned HTTP '+res.status+' for '+addr; return; }
+      let data={}; try{ data=await res.json(); }catch(e){}
+      const id=data.requestId;
+      if(data.status!=='queued' || id==null){ expresiiStatus.textContent='Unexpected reply: '+JSON.stringify(data)+(id==null?' (no requestId)':''); return; }
+      expresiiStatus.textContent='Queued (request #'+id+'). Rendering…';
+      pollExpresiiResult(addr, id, which);
+    }catch(err){
+      const m=err&&err.message?err.message:String(err);
+      expresiiStatus.textContent='Could not reach Expresii at '+addr+'.\nIs the Web API enabled in Expresii? ('+m+')';
+    }
+  }
+  function pollExpresiiResult(addr, id, which){
+    if(expresiiPollTimer) clearInterval(expresiiPollTimer);
+    expresiiPollTimer=setInterval(async ()=>{
+      if(++expresiiPollCount>150){ clearInterval(expresiiPollTimer); expresiiPollTimer=null; expresiiStatus.textContent='Timed out waiting for the render (150s).'; return; }
+      try{
+        const r=await fetch(addr+'/result/'+id); const d=await r.json();
+        if(d.status==='rendering'){ expresiiStatus.textContent='Rendering… ('+expresiiPollCount+'s)'; }
+        else if(d.status==='done'){
+          clearInterval(expresiiPollTimer); expresiiPollTimer=null;
+          if(d.error){ expresiiStatus.textContent='Render error: '+d.error; return; }
+          if(d.imageBase64){ expresiiImg.src='data:image/png;base64,'+d.imageBase64; const n = which==='selected' ? selSet.size : doc.tree.strokes.length; expresiiStatus.textContent='Done — painted '+n+' stroke(s):'; }
+          else expresiiStatus.textContent='Done.';
+        }
+        else if(d.status==='not_found'){ clearInterval(expresiiPollTimer); expresiiPollTimer=null; expresiiStatus.textContent='Result already consumed (one-shot). Re-send if needed.'; }
+      }catch(e){ /* keep polling */ }
+    },900);
+  }
+  async function testExpresii(){
+    const addr=normAddr($('expresiiAddr').value);
+    try{ const r=await fetch(addr+'/info'); const d=await r.json(); msg('Expresii '+ (d.version||'?') +' reachable at '+addr); }
+    catch(e){ msg('Expresii not reachable at '+addr+' (enable the Web API in Expresii).'); }
+  }
+  $('expresiiTest').onclick=testExpresii;
+  $('sendAll').onclick=()=>sendToExpresii('all');
+  $('sendSel').onclick=()=>sendToExpresii('selected');
+  $('expresiiClose').onclick=()=>{ if(expresiiPollTimer){ clearInterval(expresiiPollTimer); expresiiPollTimer=null; } expresiiModal.hidden=true; };
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !expresiiModal.hidden){ $('expresiiClose').onclick(); } });
+
   $('addStrokeBtn').onclick=addStroke;
   $('dupStrokeBtn').onclick=()=>{ if(selected>=0) duplicateStroke(selected); else msg('Select a stroke first'); };
   $('applyTf').onclick=applyTransform; $('resetTf').onclick=resetTfInputs;
