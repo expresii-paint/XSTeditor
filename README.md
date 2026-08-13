@@ -5,6 +5,9 @@ painting-stroke format used by [Expresii Paint](https://www.expresii.com/).
 
 No build step, no server, no CDN. Just open `index.html` in a browser.
 
+![XST Editor — editing an Expresii .xst file, with the Expresii send controls, wetness/brush
+params, and a selected stroke](assets/xst-editor-screenshot.png)
+
 ## What it does
 
 - **Open** a `.xst` file (drag-drop, the Open button, or the Recent menu).
