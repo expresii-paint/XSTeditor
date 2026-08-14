@@ -1188,42 +1188,61 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
         +'<line x1="'+P1(hA[0])+'" y1="'+P1(hA[1])+'" x2="'+P1(p2[0])+'" y2="'+P1(p2[1])+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'
         +'<line x1="'+P1(hB[0])+'" y1="'+P1(hB[1])+'" x2="'+P1(p2[0])+'" y2="'+P1(p2[1])+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>';
     }
-    // rotation icon = 90° arc with arrowheads at BOTH ends (consistent tangential sense;
-    // each arrowhead pulled back by a small GAP so its barbs don't touch/overlap the arc)
-    function rotIcon(cx2,cy2,size){
+    // rotation icon = 90° arc with arrowheads at BOTH ends, both pointing ALONG the arc's
+    // travel direction (consistent rotation sense). Each tip is pulled back by a small GAP
+    // so its barbs don't touch/overlap the arc.
+    function rotIcon(cx2,cy2,size,rotDeg){
       const Rr=size, n=20, sweep=90; let pts=[];
       for(let i=0;i<=n;i++){ const th=(sweep*i/n)*Math.PI/180; pts.push([cx2+Rr*Math.sin(th), cy2-Rr*Math.cos(th)]); }
-      const segs=pts.map(p=>P1(p[0])+','+P1(p[1])).join(' ');
       const p0=pts[0], p1=pts[1], pNm=pts[n-1], pNe=pts[n];
       const GAP=2.0, HEAD=3.6;
-      // one arrowhead at an arc end; tip shifted back along travel by GAP so it clears the arc
-      function arrowAt(tip, prev, dirSign){
-        const dx=tip[0]-prev[0], dy=tip[1]-prev[1], l=Math.hypot(dx,dy)||1;
-        const ux=dx/l, uy=dy/l;            // travel direction (tangent)
-        const px=-uy, py=ux;               // perpendicular
-        const tx=tip[0]+dirSign*GAP*ux, ty=tip[1]+dirSign*GAP*uy;  // pulled-back tip
-        const b1=[tx-HEAD*ux+HEAD*0.7*px, ty-HEAD*uy+HEAD*0.7*py];
-        const b2=[tx-HEAD*ux-HEAD*0.7*px, ty-HEAD*uy-HEAD*0.7*py];
-        return '<line x1="'+P1(b1[0])+'" y1="'+P1(b1[1])+'" x2="'+P1(tx)+'" y2="'+P1(ty)+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'
-             + '<line x1="'+P1(b2[0])+'" y1="'+P1(b2[1])+'" x2="'+P1(tx)+'" y2="'+P1(ty)+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>';
+      const unit=(a,b)=>{ const dx=b[0]-a[0], dy=b[1]-a[1], l=Math.hypot(dx,dy)||1; return [dx/l,dy/l]; };
+      // arrowhead whose tip sits at `tip` and points ALONG travel dir `t` (forward).
+      // Caller places `tip` radially OUTSIDE the arc so the barbs never overlap it.
+      function head(tip,t){
+        const ux=t[0], uy=t[1], px=-uy, py=ux;
+        const Tx=tip[0], Ty=tip[1];               // tip (already outside the arc)
+        const bx=Tx-HEAD*ux,  by=Ty-HEAD*uy;       // barb base behind the tip
+        const b1=[bx+HEAD*0.7*px, by+HEAD*0.7*py];
+        const b2=[bx-HEAD*0.7*px, by-HEAD*0.7*py];
+        return '<line x1="'+P1(b1[0])+'" y1="'+P1(b1[1])+'" x2="'+P1(Tx)+'" y2="'+P1(Ty)+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'
+             + '<line x1="'+P1(b2[0])+'" y1="'+P1(b2[1])+'" x2="'+P1(Tx)+'" y2="'+P1(Ty)+'" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>';
       }
-      const aS = arrowAt(p0, p1, -1);     // start: travel p0->p1, tip pulled back
-      const aE = arrowAt(pNe, pNm, +1);    // end:   travel pNm->pNe, tip pulled forward
-      return '<polyline points="'+segs+'" fill="none" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>' + aS + aE;
+      const tS=unit(p0,p1);                 // travel direction at the start end
+      const aDirS=[-tS[0],-tS[1]];          // arrow points this way (user-confirmed: UP at UR end)
+      const tE=unit(pNm,pNe);               // travel direction at the end end
+      const aDirE=[tE[0],tE[1]];            // end arrow follows travel dir (start arrow kept as user-confirmed)
+      // tip sits HEAD px OUTSIDE each arc end, pointing along its aDir; head() puts the barbs
+      // back at the arc end so each arrowhead is attached and never overlaps the arc stroke.
+      const tipS=[p0[0]+HEAD*aDirS[0], p0[1]+HEAD*aDirS[1]];
+      const tipE=[pNe[0]+HEAD*aDirE[0], pNe[1]+HEAD*aDirE[1]];
+      // Bake the per-corner rotation into the geometry itself (no <g transform>, which
+      // innerHTML on an <svg> silently drops). Rotate every point and direction about (cx2,cy2).
+      const ca=Math.cos((rotDeg||0)*Math.PI/180), sa=Math.sin((rotDeg||0)*Math.PI/180);
+      const RPT=p=>[ (p[0]-cx2)*ca-(p[1]-cy2)*sa+cx2, (p[0]-cx2)*sa+(p[1]-cy2)*ca+cy2 ];
+      const RDIR=d=>[ d[0]*ca-d[1]*sa, d[0]*sa+d[1]*ca ];
+      const ptsR=pts.map(RPT), tipSr=RPT(tipS), tipEr=RPT(tipE);
+      const aDirSr=RDIR(aDirS), aDirEr=RDIR(aDirE);
+      const segs=ptsR.map(p=>P1(p[0])+','+P1(p[1])).join(' ');
+      const aS=head(tipSr,aDirSr);          // start arrowhead, user-confirmed direction
+      const aE=head(tipEr,aDirEr);          // end arrowhead, mirrored (same convention)
+      return '<polyline points="'+segs+'" fill="none" stroke="'+ICON+'" stroke-width="2" stroke-linecap="round"/>'+aS+aE;
     }
     function drawNode(cx2,cy2,cls,dataId,arrows,useRot,extraClass,cursorStyle,rotDeg){
-      let inner = useRot ? rotIcon(cx2,cy2,ICON_SIZE) : arrows.map(a=>dblArrow(cx2,cy2,a,ICON_SIZE)).join('');
-      if(rotDeg) inner = '<g transform="rotate('+rotDeg+' '+P1(cx2)+' '+P1(cy2)+')">'+inner+'</g>';
+      let inner = useRot ? rotIcon(cx2,cy2,ICON_SIZE,rotDeg) : arrows.map(a=>dblArrow(cx2,cy2,a,ICON_SIZE)).join('');
       return '<g class="ef-handle '+cls+(extraClass?' '+extraClass:'')+'" data-handle="'+dataId+'"'+(cursorStyle?' style="cursor:'+cursorStyle+'"':'')+' pointer-events="all">'
         + inner
         + '<circle cx="'+P1(cx2)+'" cy="'+P1(cy2)+'" r="'+HIT+'" fill="transparent" pointer-events="all"/>'
         + '</g>';
     }
-    const CORNER_ROT = { tl:0, tr:90, br:180, bl:270 };
+    const CORNER_ROT = { tl:270, tr:0, br:90, bl:180 };
     if(interactionMode === 'scale'){
       // ---- scale mode: 8 resize handles (double-headed arrows along drag axis) ----
+      // corner arrows always point along the fixed 45° diagonal toward that corner,
+      // independent of the selection box aspect ratio (Inkscape-style)
+      const CORNER_ANG = { tl:225, tr:315, bl:135, br:45 };
       for(const c of corners){
-        const diag = Math.atan2(c.y-cy, c.x-cx)*180/Math.PI;
+        const diag = CORNER_ANG[c.id];
         const cur = (c.id==='tl'||c.id==='br') ? 'nwse-resize' : 'nesw-resize';
         out += drawNode(c.x,c.y,'ef-corner',c.id,[diag,diag+180],false,'',cur);
       }
@@ -1236,7 +1255,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     } else {
       // ---- rotate mode: corners rotate (arc with both ends arrowed), edges shear (arrows) ----
       for(const c of corners){
-        out += drawNode(c.x,c.y,'ef-corner',c.id,[],true,'ef-rot-rotate',CORNER_ROT[c.id]);
+        out += drawNode(c.x,c.y,'ef-corner',c.id,[],true,'ef-rot-rotate','',CORNER_ROT[c.id]);
       }
       for(const e of edges){
         const ang = (e.id==='t'||e.id==='b') ? [0,180] : [90,270];
