@@ -32,9 +32,15 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
 - **Edit** per-frame coordinates in the frames table (x, y, z, pitch, roll, turn, pressure);
   insert/delete the cursor frame.
 - **Layers** panel (reflects the file's `L` layer commands).
-- **Save** via a dialog (filename + path; native picker where supported, with a
-  download fallback). Untouched lines are preserved byte-for-byte; edited strokes save
-  with their new values.
+- **Clean up commands undone** — Expresii records an *undo* as a single `u` stream
+  command and a *redo* as `r` (each discards or restores the most-recently-drawn
+  stroke). Those `u`/`r` commands — and the strokes they undo — stay in the file, so a
+  recording full of trial strokes ends up bloated. Click **Clean up undone** (or press
+  the `u` / `r` key) to replay the file's undo/redo history and rewrite it with only the
+  strokes that *survived* kept, and the `u`/`r` commands themselves removed. Every kept
+  line is preserved verbatim (byte-for-byte), so an already-clean file round-trips
+  identically and the button reports "Nothing to clean" when there's nothing to remove.
+  The cleanup is undoable via the editor's own **Undo** (Ctrl+Z) history.
 - **Recents** persisted in `localStorage`.
 
 ## How to use

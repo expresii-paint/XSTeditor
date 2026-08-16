@@ -202,6 +202,7 @@
         <div class="toolbar-row">
           <button id="addStrokeBtn">+ Add stroke</button>
           <button id="dupStrokeBtn">Duplicate</button>
+          <button id="cleanUndoBtn" title="Remove strokes that were undone (and their 'u'/'r' commands) — Undo='u', Redo='r'">Clean up undone</button>
         </div>
       </div>
       <div id="strokeList"></div>
@@ -599,6 +600,75 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
                 frames:JSON.parse(JSON.stringify(src.frames)).map(f=>{f.changed=true;return f;}), hasPress:src.hasPress};
     doc.tree.strokes.splice(si+1,0,copy); afterChange(); selectStroke(si+1);
   }
+  // ---------------------------------------------------------------------------
+  // CLEAN UP COMMANDS UNDONE
+  // Expresii records an undo as a single 'u' command and a redo as 'r'. A 'u'
+  // discards the most-recently-drawn stroke; 'r' brings it back. The strokes
+  // themselves are still present in the file, so a recording full of trial
+  // strokes ends up bloated. This rewrites the document so:
+  //   * every 'u'/'r' command is removed,
+  //   * only the strokes that survived the undo/redo history are kept,
+  //   * every kept line is byte-exact (verbatim) — no re-serialization, so a
+  //     round-trip of an already-clean file is identical.
+  // Keys: Undo = 'u' (clean up undone), Redo = 'r' (clean up undone).
+  // (These are separate from the editor's own Ctrl+Z / Ctrl+Y history.)
+  function cleanUpUndone(){
+    const text = emitXST(doc);
+    const lines = text.split('\n');
+    const parsed = lines.map(parseLine);
+    // Group pen-down→pen-up cycles into "strokes". A stroke begins at its
+    // down event (prev s-frame pressure 0 -> this s-frame pressure >0), like
+    // buildTree does.
+    const strokes = [];          // each: {listStart, listEnd, downIdx, lines:[i...]}
+    let cur = null;
+    for(let i=0;i<parsed.length;i++){
+      const o = parsed[i];
+      if(o.type!=='stroke'){ if(cur){ strokes.push(cur); cur=null; } continue; }
+      const prev = parsed[i-1];
+      const downEvent = prev && prev.type==='stroke' && prev.pressure===0 && o.pressure>0;
+      if(!cur || (downEvent && cur.hasPress)){ if(cur) strokes.push(cur); cur={listStart:i, listEnd:i, downIdx:i, lines:[i], hasPress:false}; }
+      else cur.lines.push(i);
+      cur.listEnd = i;
+      if(o.pressure>0) cur.hasPress = true;
+    }
+    if(cur) strokes.push(cur);
+
+    // Replay the stream with an undo/redo stack to find which strokes are undone.
+    // Note: parseLine() does not tag 'u'/'r' (they fall through to type 'other'), so we
+    // recognise them by command here.
+    const isUndo = o => o.type==='undo' || (o.type==='other' && o.cmd==='u');
+    const isRedo = o => o.type==='redo' || (o.type==='other' && o.cmd==='r');
+    const drawn = [], undone = [];
+    let si = 0;
+    for(let i=0;i<parsed.length;i++){
+      const o = parsed[i];
+      if(isUndo(o)){ if(drawn.length) undone.push(drawn.pop()); }
+      else if(isRedo(o)){ if(undone.length) drawn.push(undone.pop()); }
+      else if(o.type==='stroke'){
+        if(si<strokes.length && i===strokes[si].downIdx){ drawn.push(strokes[si]); si++; undone.length=0; }
+      }
+    }
+    const kept = new Set(drawn);
+    const removedCount = strokes.length - drawn.length;
+
+    // Emit: prelude (up to first stroke's start) + kept strokes + trailing,
+    // verbatim, dropping every 'u'/'r' command.
+    const firstStart = strokes.length ? strokes[0].listStart : lines.length;
+    const lastEnd = strokes.length ? strokes[strokes.length-1].listEnd : -1;
+    const out = [];
+    for(let i=0;i<firstStart;i++){ const o=parsed[i]; if(isUndo(o)||isRedo(o)) continue; out.push(lines[i]); }
+    for(const s of drawn){ for(const li of s.lines) out.push(lines[li]); }
+    for(let i=lastEnd+1;i<lines.length;i++){ const o=parsed[i]; if(isUndo(o)||isRedo(o)) continue; out.push(lines[i]); }
+
+    const cleaned = out.join('\n');
+    if(removedCount===0){ msg('Nothing to clean — no undone strokes.'); return; }
+    pushHistory();
+    doc.tree = parseXST(cleaned).tree;
+    selSet.clear(); selected=-1; cursorFrame=-1; interactionMode='scale';
+    afterChange(); zoomToFit();
+    msg('Cleaned up '+removedCount+' undone stroke'+(removedCount===1?'':'s')+'.');
+  }
+
   function addStroke(){
     pushHistory();
     const f=[{type:'stroke',x:0,y:0,z:0.02187,pitch:0,roll:0,turn:0,pressure:0,changed:true},
@@ -1037,6 +1107,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !expresiiModal.hidden){ $('expresiiClose').onclick(); } });
 
   $('addStrokeBtn').onclick=addStroke;
+  $('cleanUndoBtn').onclick=cleanUpUndone;
   $('dupStrokeBtn').onclick=()=>{ if(selected>=0) duplicateStroke(selected); else msg('Select a stroke first'); };
   $('applyTf').onclick=applyTransform; $('resetTf').onclick=resetTfInputs;
   $('insFrame').onclick=()=>{ if(selected<0) return; const s=doc.tree.strokes[selected]; pushHistory();
@@ -1504,7 +1575,13 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   $('weight').oninput=e=>{view.weight=+e.target.value;renderPreview();};
   document.querySelectorAll('input[name=cmode]').forEach(r=>r.onchange=e=>{view.colorMode=e.target.value;renderPreview();});
   document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}
-    else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();} });
+    else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();}
+    else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==='u'||e.key==='r')){
+      // Clean up commands undone: 'u' = Undo-command cleanup, 'r' = Redo-command cleanup
+      // (Expresii records undo/redo as 'u'/'r' stream commands). Ignore when typing in a field.
+      const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
+      e.preventDefault(); cleanUpUndone();
+    } });
   const tfDx=$('tfDx'),tfDy=$('tfDy'),tfScale=$('tfScale'),tfRot=$('tfRot'),tfFlipX=$('tfFlipX'),tfFlipY=$('tfFlipY'),tfPmul=$('tfPmul'),tfPadd=$('tfPadd'),tfZadd=$('tfZadd');
 
   function newBlank(){ doc.tree={prelude:[],strokes:[],trailing:[]}; selSet.clear(); selected=-1; cursorFrame=-1; view.panX=0; view.panY=0;
