@@ -31,6 +31,13 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
   flip / pressure fields for the single selected stroke.
 - **Edit** per-frame coordinates in the frames table (x, y, z, pitch, roll, turn, pressure);
   insert/delete the cursor frame.
+- **Stroke list** (sidebar): each stroke shows a wireframe thumbnail and frame count. To the
+  right of each item are **↑/↓** (reorder) and **✕ Delete**. Expresii records a stroke's
+  pen-up / pen-down as shared frames between neighbours, so deleting a stroke would otherwise
+  leave the neighbouring stroke without a starting brush-down or a trailing brush-up. After a
+  delete the editor automatically restores a brush-down head and/or brush-up tail on the
+  affected neighbours (a duplicated geometry node at pressure 0), keeping every remaining
+  stroke a well-formed pen-down→pen-up.
 - **Tools (Inkscape-like, mutually exclusive)** in the top toolbar:
   - **Selector Tool** (default) — select & transform strokes. A selected stroke gets the
     transform handles: 4 **corner** nodes (scale in scale-mode, rotate in rotate-mode) and
