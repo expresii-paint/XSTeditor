@@ -50,6 +50,11 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
     coordinates, so they flow through **Save** and **Send selected**. Pen-up (`pressure 0`)
     nodes are drawn dashed so you can tell them apart from ink nodes. With a node selected,
     press **Del** (or Delete/Backspace) to delete that node, the same as the popup menu.
+  - **Spline mode** (preview-bar checkbox + `CP/100` density) — fit each stroke to a small set
+    of editable **control points** (centripetal Catmull-Rom through them; adaptive RDP keeps a
+    usable count). In Node Tool the control points become the draggable nodes and the visible
+    stroke is the smooth spline through them. On **Save** every spline stroke is resampled back
+    to `s` brush frames (pen-up/pen-down preserved), so Expresii replays a smooth stroke.
   - Press `n` to toggle between the two tools. The tools are exclusive: when the Selector
     Tool is active the Node Tool is not, and vice-versa.
 - **Clean up commands undone** — Expresii records an *undo* as a single `u` stream

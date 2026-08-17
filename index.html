@@ -572,6 +572,7 @@ function splineToFrames(st, density){
   const frames = sampled.map((p,i)=>{
     const f=i/(sampled.length-1||1);
     return {
+      type:'stroke',
       x: p.x, y: p.y,
       z: _lerpArr(sc.z,f), pitch: _lerpArr(sc.pitch,f), roll: _lerpArr(sc.roll,f),
       turn: _lerpArr(sc.turn,f), pressure: _lerpArr(sc.pressure,f), changed:true
