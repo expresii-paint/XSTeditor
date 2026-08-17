@@ -208,7 +208,7 @@
     <div id="previewBar">
       <button id="zoomFit" title="Zoom to fit">Zoom to fit</button>
       <span class="range">Zoom <input id="zoom" type="range" min="0.2" max="40" step="0.1" value="1" style="width:120px"> <b id="zoomVal" style="min-width:42px;display:inline-block;text-align:right">1.0×</b></span>
-      <label><input id="showFrames" type="checkbox"> Frame dots</label>
+      <label><input id="showFrames" type="checkbox"> Frame dots</label>       <label><input id="splineMode" type="checkbox"> Spline</label>       <label title="Control points per 100 units (resample density)">CP/100 <input id="splineDensity" type="number" min="4" max="60" step="1" value="14" style="width:52px"></label>
       <label><input id="colorStroke" type="radio" name="cmode" value="stroke" checked> Color by stroke</label>
       <label><input id="colorInk" type="radio" name="cmode" value="ink"> Ink (pressure)</label>
       <span class="range" title="Max stroke width at full pressure">Weight <input id="weight" type="range" min="1" max="40" step="1" value="12" style="width:90px"></span>
@@ -502,6 +502,133 @@ function clearStrokeScalar(s,cmd){
 function findTitle(tree){
   for(const o of tree.prelude) if(o.type==='title') return o;
   return null;
+}
+
+/* ===================== SPLINE ENGINE =====================
+   Spline mode: a stroke's editable representation is `cps` (control points).
+   The visible path is a centripetal Catmull-Rom through cps; on Save, frames are
+   resampled from the spline so Expresii replays a smooth stroke. Frames in raw
+   mode are untouched. A control point keeps {x,y,z,pitch,roll,turn,pressure}
+   (interpolated for synthetic points) so it can be turned back into brush frames.
+   Pen-up: a cp with pressure<=0 is a control point but contributes only as a
+   position; resampling keeps a single pen-up frame at the spline end. */
+
+function _splinePts(cps){ return cps.map(p=>({x:p.x,y:p.y})); }
+function _splineZPT(cps){
+  return {
+    z: cps.map(p=>p.z||0), pitch: cps.map(p=>p.pitch||0), roll: cps.map(p=>p.roll||0),
+    turn: cps.map(p=>p.turn||0), pressure: cps.map(p=>p.pressure||0)
+  };
+}
+function catmullRom(p0,p1,p2,p3,t){
+  const t2=t*t, t3=t2*t;
+  return 0.5*((2*p1) + (-p0+p2)*t + (2*p0-5*p1+4*p2-p3)*t2 + (-p0+3*p1-3*p2+p3)*t3);
+}
+function _centripetalTS(pts){
+  const n=pts.length; if(n===0) return [];
+  const ts=[0];
+  for(let i=1;i<n;i++){
+    const dx=pts[i].x-pts[i-1].x, dy=pts[i].y-pts[i-1].y;
+    const d=Math.sqrt(Math.hypot(dx,dy))||1e-6;
+    ts.push(ts[i-1]+Math.pow(d,0.5));
+  }
+  return ts;
+}
+function sampleSpline(cps, samples){
+  const pts=_splinePts(cps), n=pts.length;
+  if(n===0) return [];
+  if(n===1) return [ {x:pts[0].x,y:pts[0].y} ];
+  if(n===2){
+    const out=[]; for(let i=0;i<samples;i++){ const t=i/(samples-1); out.push({x:pts[0].x+(pts[1].x-pts[0].x)*t, y:pts[0].y+(pts[1].y-pts[0].y)*t}); } return out;
+  }
+  const ts=_centripetalTS(pts), out=[];
+  const total=ts[n-1];
+  for(let i=0;i<samples;i++){
+    const u = total*(i/(samples-1));
+    let k=1; while(k<n-1 && ts[k]<u) k++;
+    const t = (u-ts[k-1])/((ts[k]-ts[k-1])||1e-6);
+    const p0=pts[k-2]||pts[k-1], p1=pts[k-1], p2=pts[k], p3=pts[k+1]||pts[k];
+    out.push({ x: catmullRom(p0.x,p1.x,p2.x,p3.x,t), y: catmullRom(p0.y,p1.y,p2.y,p3.y,t) });
+  }
+  return out;
+}
+function _lerpArr(arr,f){
+  if(arr.length===1) return arr[0];
+  const x=f*(arr.length-1), i=Math.floor(x), t=x-i;
+  if(i>=arr.length-1) return arr[arr.length-1];
+  return arr[i]+(arr[i+1]-arr[i])*t;
+}
+function splineToFrames(st, density){
+  if(!st.cps || st.cps.length===0) return st.frames;
+  const cps=st.cps;
+  const pts=_splinePts(cps), sc=_splineZPT(cps);
+  const n=pts.length;
+  let len=0;
+  for(let i=0;i<n-1;i++){ len+=Math.hypot(pts[i+1].x-pts[i].x, pts[i+1].y-pts[i].y); }
+  const per = Math.max(6, Math.round(density||14));
+  let count = Math.max(8, Math.min(4000, Math.round(len/100*per) + n*2));
+  const sampled=sampleSpline(cps, count);
+  const hasPenUp = cps.some(p=>p.pressure<=0);
+  const frames = sampled.map((p,i)=>{
+    const f=i/(sampled.length-1||1);
+    return {
+      x: p.x, y: p.y,
+      z: _lerpArr(sc.z,f), pitch: _lerpArr(sc.pitch,f), roll: _lerpArr(sc.roll,f),
+      turn: _lerpArr(sc.turn,f), pressure: _lerpArr(sc.pressure,f), changed:true
+    };
+  });
+  if(hasPenUp && frames.length){
+    frames[frames.length-1].pressure=0;
+    if(cps[0].pressure<=0) frames[0].pressure=0;
+  }
+  return frames;
+}
+function rdpSimplify(pts, eps){
+  if(pts.length<3) return pts.slice();
+  const keep=new Array(pts.length).fill(false); keep[0]=keep[pts.length-1]=true;
+  const stack=[[0,pts.length-1]];
+  while(stack.length){
+    const [s,e]=stack.pop(); if(e-s<2) continue;
+    let dmax=0, idx=s;
+    for(let i=s+1;i<e;i++){
+      const dx=pts[e].x-pts[s].x, dy=pts[e].y-pts[s].y;
+      const L=Math.hypot(dx,dy)||1e-9;
+      const d=Math.abs((pts[i].x-pts[s].x)*dy-(pts[i].y-pts[s].y)*dx)/L;
+      if(d>dmax){ dmax=d; idx=i; }
+    }
+    if(dmax>eps){ keep[idx]=true; stack.push([s,idx]); stack.push([idx,e]); }
+  }
+  return pts.filter((_,i)=>keep[i]);
+}
+function framesToCps(st, eps){
+  const fr=st.frames;
+  if(!fr || fr.length<2) return fr?fr.map(f=>({...f})):[];
+  const pts=fr.map(f=>({x:f.x,y:f.y}));
+  // RDP with an adaptive epsilon so we keep enough control points to reshape the curve:
+  // start tight, relax until we fall into a usable range (6..min(64, n/2)).
+  let simp=rdpSimplify(pts, eps||1.5);
+  const lo=6, hi=Math.min(64, Math.max(8, Math.floor(fr.length/2)));
+  let e=eps||1.5;
+  while(simp.length>hi && e<200){ e*=1.6; simp=rdpSimplify(pts, e); }
+  while(simp.length<lo && e>0.05){ e*=0.5; simp=rdpSimplify(pts, e); }
+  // Floor: if still too few, take evenly-spaced frames as control points.
+  if(simp.length<lo){
+    simp=[];
+    const step=Math.max(1, Math.floor((fr.length-1)/(lo-1)));
+    for(let i=0;i<=lo-1;i++){ simp.push({x:fr[Math.min(fr.length-1,i*step)].x, y:fr[Math.min(fr.length-1,i*step)].y}); }
+  }
+  const cps=simp.map(p=>{
+    let bi=0,bd=1e18;
+    for(let i=0;i<fr.length;i++){ const d=Math.hypot(fr[i].x-p.x,fr[i].y-p.y); if(d<bd){bd=d;bi=i;} }
+    return {...fr[bi]};
+  });
+  cps[0]={...fr[0]}; cps[cps.length-1]={...fr[fr.length-1]};
+  return cps;
+}
+function ensureCps(st, eps){
+  if(!st.cps) st.cps=framesToCps(st, eps);
+  if(!st.cps || !st.cps.length) st.cps=st.frames.map(f=>({...f}));
+  return st.cps;
 }
 
 /* ===================== DOM APP (guarded) ===================== */
@@ -988,7 +1115,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     if(editMode==='node' && selected>=0){
       const s=doc.tree.strokes[selected];
       let nh='<g class="node-layer">';
-      if(s) s.frames.forEach((f,fi)=>{
+      const nodePts = (splineMode && s && s.cps && s.cps.length) ? s.cps : (s?s.frames:[]);
+      if(s) nodePts.forEach((f,fi)=>{
         const X=tx(f.x), Y=ty(f.y);
         const isSel = fi===selectedNode || selNodes.has(fi);
         const r = isSel?4.2:3.2;
@@ -1061,6 +1189,10 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   // True round-trip of the CURRENT (edited) document.
   function currentXSTText(){ return emitXST(doc); }
 
+  // Before saving, resample every spline-mode stroke's frames from its control points
+  // so the written .xst replays the edited spline through Expresii's brush engine.
+  function syncSplineFrames(){ if(!splineMode) return; for(const st of doc.tree.strokes){ if(st.cps && st.cps.length) st.frames=splineToFrames(st, splineDensity); } }
+
   // --- Save dialog (filename + location) ---
   const saveModal=$('saveModal');
   function openSaveDialog(){
@@ -1076,6 +1208,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   function saveDownload(){
     let name=$('saveName').value.trim() || defaultSaveName();
     if(!/\.xst$/i.test(name)) name+='.xst';
+    syncSplineFrames();
     const blob=new Blob([currentXSTText()],{type:'text/plain'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
     currentName=name; updateStat(); closeSaveDialog(); msg('Saved '+name);
@@ -1089,6 +1222,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       const opts={ suggestedName:name, types:[{description:'Expresii Stroke File', accept:{'text/plain':['.xst','.txt']}}] };
       const handle=await window.showSaveFilePicker(opts);
       const writable=await handle.createWritable();
+      syncSplineFrames();
       await writable.write(currentXSTText());
       await writable.close();
       currentName=handle.name; updateStat(); closeSaveDialog(); msg('Saved '+handle.name);
@@ -1236,6 +1370,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   let editMode='off';              // 'off' | 'node' (== 'node' iff tool==='node')
   let selectedNode=-1;            // frame index of the PRIMARY selected node (-1 = none)
   let selNodes=new Set();        // Node Tool: frame indices of ALL selected nodes (group marquee / toggle)
+  let splineMode=false;          // Spline mode: Node Tool edits control points (cps); frames resampled on save
+  let splineDensity=14;          // control points per ~100 units when resampling spline -> frames
   let nodeMarquee=false;         // true while a Node-Tool node rubber-band drag is active
   let nodeDrag=null;              // {si, fi, start} while dragging a node
   let nodeMenuFor=null;           // {si, fi} target of the open node popup menu
@@ -1479,7 +1615,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
           frozenView={minX:pv.minX,maxX:pv.maxX,minY:pv.minY,maxY:pv.maxY};
           // Nodes that move: the whole group if grabbing an already-selected node, otherwise just it.
           const groupFis = (additive || selNodes.has(fi)) ? [...selNodes] : [fi];
-          const origPos = groupFis.map(gfi => { const gf=doc.tree.strokes[selected].frames[gfi]; return {fi:gfi, x:gf.x, y:gf.y}; });
+          const src = splineMode ? doc.tree.strokes[selected].cps : doc.tree.strokes[selected].frames;
+          const origPos = groupFis.map(gfi => { const gf=src[gfi]; return {fi:gfi, x:gf.x, y:gf.y}; });
           // Remember where the cursor was in DATA space at grab-time, so the whole group moves by
           // (cursorNow - cursorStart) — preserving the exact grab offset (no initial jump).
           const sb=toSvg(e.clientX,e.clientY); const S0=previewScale*view.zoom;
@@ -1671,7 +1808,9 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       const nx = g.minX + (cur.x - g.pad - g.panX)/S;
       const ny = g.flip ? g.maxY - (cur.y - g.pad - g.panY)/S : g.minY + (cur.y - g.pad - g.panY)/S;
       const dxd=nx-nodeDrag.startData.x, dyd=ny-nodeDrag.startData.y;
-      for(const o of nodeDrag.origPos){ const f=s.frames[o.fi]; if(f){ f.x=o.x+dxd; f.y=o.y+dyd; f.changed=true; } }
+      const pts = splineMode ? s.cps : s.frames;
+      for(const o of nodeDrag.origPos){ const f=pts[o.fi]; if(f){ f.x=o.x+dxd; f.y=o.y+dyd; f.changed=true; } }
+      if(splineMode && s.cps && s.cps.length){ s.frames=splineToFrames(s, splineDensity); }
       nodeDrag.moved=true;
       renderPreview();
       return;
@@ -1785,13 +1924,17 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     const item=e.target.closest('.item'); if(!item) return;
     const target=nodeMenuFor; if(!target) return;   // capture now; document close-handler may null it on bubble
     const s=doc.tree.strokes[target.si];
-    if(item.dataset.act==='delete' && s && target.fi>=0 && target.fi<s.frames.length){
-      pushHistory();
-      s.frames.splice(target.fi,1);
-      selectedNode=-1;
-      hideNodeMenu();
-      afterChange();
-      msg('Deleted node #'+(target.fi+1)+' from stroke #'+(target.si+1)+'.');
+    if(item.dataset.act==='delete' && s && target.fi>=0){
+      const arr = (splineMode && s.cps && s.cps.length) ? s.cps : s.frames;
+      if(target.fi<arr.length){
+        pushHistory();
+        arr.splice(target.fi,1);
+        if(splineMode) s.frames=splineToFrames(s, splineDensity);
+        selectedNode=-1;
+        hideNodeMenu();
+        afterChange();
+        msg('Deleted '+(splineMode?'control point':'node')+' #'+(target.fi+1)+' from stroke #'+(target.si+1)+'.');
+      }
     }
   });
   document.addEventListener('click',e=>{ if(!e.target.closest('.node-menu')) hideNodeMenu(); });
@@ -1807,7 +1950,18 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     msg('Deleted node from stroke #'+(selected+1)+'.');
   }
 
-  $('showFrames').onchange=e=>{view.showFrames=e.target.checked;renderPreview();};
+  $('showFrames').onchange=e=>{view.showFrames=e.target.checked;renderPreview();};  $('splineMode').onchange=e=>{
+    splineMode=e.target.checked;
+    // When enabling, fit control points for every stroke that lacks them (using current frames).
+    // When disabling, keep the last resampled frames (the visible path stays smooth until next edit).
+    if(splineMode){
+      for(const st of doc.tree.strokes){ if(!st.cps || !st.cps.length) ensureCps(st, 2.5); }
+    }
+    if(tool==='node') renderPreview(); else renderAll();
+  };
+  $('splineDensity').oninput=e=>{ splineDensity=Math.max(4,Math.min(60,+e.target.value||14)); if(splineMode && selected>=0){ refreshSplineFrames(selected); } };
+  function refreshSplineFrames(si){ const st=doc.tree.strokes[si]; if(st && st.cps && st.cps.length){ st.frames=splineToFrames(st, splineDensity); afterChange(); } }
+
   $('weight').oninput=e=>{view.weight=+e.target.value;renderPreview();};
   document.querySelectorAll('input[name=cmode]').forEach(r=>r.onchange=e=>{view.colorMode=e.target.value;renderPreview();});
   document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}
