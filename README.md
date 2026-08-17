@@ -31,7 +31,13 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
   flip / pressure fields for the single selected stroke.
 - **Edit** per-frame coordinates in the frames table (x, y, z, pitch, roll, turn, pressure);
   insert/delete the cursor frame.
-- **Layers** panel (reflects the file's `L` layer commands).
+- **Node edit mode** — click **Node edit** in the top toolbar (or press `n`) to switch
+  into node-editing. With a stroke selected, every `s`-frame of that stroke is shown as a
+  draggable **node** on the preview. Drag a node to move that single frame (pressure stays
+  the same, position is re-projected through the current zoom/flip); right-click a node for
+  a popup menu where you can **Delete node**. Node moves are recorded in the undo history
+  and baked into the stroke coordinates, so they flow through **Save** and **Send selected**.
+  Pen-up (`pressure 0`) nodes are drawn dashed so you can tell them apart from ink nodes.
 - **Clean up commands undone** — Expresii records an *undo* as a single `u` stream
   command and a *redo* as `r` (each discards or restores the most-recently-drawn
   stroke). Those `u`/`r` commands — and the strokes they undo — stay in the file, so a
