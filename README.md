@@ -48,7 +48,8 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
     through the current zoom/flip); right-click a node for a popup menu where you can
     **Delete node**. Node moves are recorded in the undo history and baked into the stroke
     coordinates, so they flow through **Save** and **Send selected**. Pen-up (`pressure 0`)
-    nodes are drawn dashed so you can tell them apart from ink nodes.
+    nodes are drawn dashed so you can tell them apart from ink nodes. With a node selected,
+    press **Del** (or Delete/Backspace) to delete that node, the same as the popup menu.
   - Press `n` to toggle between the two tools. The tools are exclusive: when the Selector
     Tool is active the Node Tool is not, and vice-versa.
 - **Clean up commands undone** — Expresii records an *undo* as a single `u` stream
