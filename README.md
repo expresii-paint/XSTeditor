@@ -12,7 +12,8 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
 
 - **Open** a `.xst` file (drag-drop, the Open button, or the Recent menu).
 - **Preview** the strokes on a paper-coordinate canvas (Expresii convention: +X right,
-  +Y down) with grid, axes, and zoom-to-fit.
+  +Y down) with grid, a dashed −5..+5 world-coordinate paper box, labelled axes
+  (red X: −EX · 0 · +EX, blue Y: +EY · 0 · −EY, +Y down), and zoom-to-fit.
 - **Select** strokes:
   - click a stroke to select it,
   - Shift/Ctrl/Cmd-click to toggle multiple,

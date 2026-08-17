@@ -1059,21 +1059,29 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     const bx0=tx(-EX), bx1=tx(EX), by0=ty(-EY), by1=ty(EY);
     if(bx0>=pad&&bx1<=W-pad&&by0>=pad&&by1<=H-pad)
       out+='<rect x="'+bx0.toFixed(1)+'" y="'+by0.toFixed(1)+'" width="'+(bx1-bx0).toFixed(1)+'" height="'+(by1-by0).toFixed(1)+'" fill="none" stroke="#bbb" stroke-dasharray="4 4"/>';
-    // X / Y axes through the paper origin (0,0). Expresii convention: +X right, +Y down.
-    const ox=tx(0), oy=ty(0);
-    const axY=Math.max(pad,Math.min(H-pad,oy)), ayX=Math.max(pad,Math.min(W-pad,ox));
-    out+='<g font-size="11" font-family="monospace">';
-    if(pad<=ox&&ox<=W-pad) out+='<line x1="'+ox.toFixed(1)+'" y1="'+pad+'" x2="'+ox.toFixed(1)+'" y2="'+(H-pad)+'" stroke="#36c" stroke-width="1.5"/>';
-    if(pad<=oy&&oy<=H-pad) out+='<line x1="'+pad+'" y1="'+oy.toFixed(1)+'" x2="'+(W-pad)+'" y2="'+oy.toFixed(1)+'" stroke="#d33" stroke-width="1.5"/>';
-    if(pad<=ox&&ox<=W-pad&&pad<=oy&&oy<=H-pad) out+='<circle cx="'+ox.toFixed(1)+'" cy="'+oy.toFixed(1)+'" r="3" fill="#000"/>';
-    const fmt=v=>(Math.round(v*1e4)/1e4).toString();
-    out+='<text x="'+ayX.toFixed(1)+'" y="'+(pad+11)+'" fill="#36c">'+fmt(EY)+'</text>';
-    out+='<text x="'+ayX.toFixed(1)+'" y="'+(H-pad-3)+'" fill="#36c">'+fmt(-EY)+'</text>';
-    out+='<text x="'+pad+'" y="'+(axY-4).toFixed(1)+'" fill="#d33">'+fmt(-EX)+'</text>';
-    out+='<text x="'+(W-pad-4)+'" y="'+(axY-4).toFixed(1)+'" fill="#d33" text-anchor="end">'+fmt(EX)+'</text>';
-    out+='<text x="'+(W-pad-4)+'" y="'+(axY+14).toFixed(1)+'" fill="#d33" text-anchor="end">+X</text>';
-    out+='<text x="'+(ayX+5).toFixed(1)+'" y="'+(H-pad-14).toFixed(1)+'" fill="#36c">+Y (down)</text>';
-    out+='</g>';
+    // X / Y axes through the paper origin (0,0), drawn only when the paper box (the -5..+5
+    // world square) is visible. Expresii convention: +X right (red), +Y down (blue).
+    if(pad<=bx0&&bx1<=W-pad&&pad<=by0&&by1<=H-pad){
+      const ox=tx(0), oy=ty(0);
+      const fmt=v=>(Math.round(v*1e4)/1e4).toString();
+      out+='<g font-size="11" font-family="monospace">';
+      // X axis (red) — horizontal line through world y=0, spanning the paper box
+      out+='<line x1="'+bx0.toFixed(1)+'" y1="'+oy.toFixed(1)+'" x2="'+bx1.toFixed(1)+'" y2="'+oy.toFixed(1)+'" stroke="#d33" stroke-width="1.5"/>';
+      // Y axis (blue) — vertical line through world x=0, spanning the paper box
+      out+='<line x1="'+ox.toFixed(1)+'" y1="'+by0.toFixed(1)+'" x2="'+ox.toFixed(1)+'" y2="'+by1.toFixed(1)+'" stroke="#36c" stroke-width="1.5"/>';
+      out+='<circle cx="'+ox.toFixed(1)+'" cy="'+oy.toFixed(1)+'" r="3" fill="#000"/>';
+      // X-axis world-coordinate labels (red): -EX · 0 · +EX
+      out+='<text x="'+(bx0+3).toFixed(1)+'" y="'+(oy-4).toFixed(1)+'" fill="#d33">'+fmt(-EX)+'</text>';
+      out+='<text x="'+(ox+4).toFixed(1)+'" y="'+(oy-4).toFixed(1)+'" fill="#d33">0</text>';
+      out+='<text x="'+(bx1-3).toFixed(1)+'" y="'+(oy-4).toFixed(1)+'" fill="#d33" text-anchor="end">'+fmt(EX)+'</text>';
+      out+='<text x="'+(bx1-3).toFixed(1)+'" y="'+(oy+15).toFixed(1)+'" fill="#d33" text-anchor="end">+X</text>';
+      // Y-axis world-coordinate labels (blue): +EY · 0 · -EY
+      out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by0+12).toFixed(1)+'" fill="#36c">'+fmt(EY)+'</text>';
+      out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(oy+4).toFixed(1)+'" fill="#36c">0</text>';
+      out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by1-3).toFixed(1)+'" fill="#36c">'+fmt(-EY)+'</text>';
+      out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by1+14).toFixed(1)+'" fill="#36c">+Y (down)</text>';
+      out+='</g>';
+    }
     const wmax=view.weight;
     doc.tree.strokes.forEach((st,si)=>{
       const col=view.colorMode==='stroke'?PALETTE[si%PALETTE.length]:'#111';
