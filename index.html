@@ -149,6 +149,10 @@
   .node-pt{fill:#0b7;stroke:#fff;stroke-width:1.2;cursor:grab}
   .node-pt:hover{fill:#0e9}
   .node-pt.sel{fill:#fc6;stroke:#000}
+  /* Node Tool: a very thin, pointed arrow with the hotspot at the very tip, so the
+     pointer itself doesn't occlude the small node circles. Only the 1px outline shows. */
+  body.node-tool #svg{cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path d='M1 1 L1 15 L4.5 11.5 L7 17 L9.5 15.8 L7 10.5 L12 10 Z' fill='none' stroke='%23000' stroke-width='0.8'/><path d='M1 1 L1 15 L4.5 11.5 L7 17 L9.5 15.8 L7 10.5 L12 10 Z' fill='none' stroke='%23fff' stroke-width='0.4'/></svg>") 1 1, crosshair;}
+  body.node-tool #svg .stroke-g{cursor:inherit}
   .node-menu{position:fixed;z-index:50;min-width:140px;box-shadow:0 8px 24px #000a}
   .node-menu .item{cursor:pointer;padding:7px 12px;font-size:13px}
   .node-menu .item:hover{background:var(--accent);color:#06202b}
@@ -1219,6 +1223,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     selectedNode=-1; nodeDrag=null; hideNodeMenu();
     $('selToolBtn').classList.toggle('active', tool==='selector');
     $('nodeToolBtn').classList.toggle('active', tool==='node');
+    document.body.classList.toggle('node-tool', tool==='node');
     renderAll();
     msg(tool==='node' ? 'Node Tool — click a stroke, then drag nodes or right-click a node.' : 'Selector Tool — drag handles to transform; click a stroke to switch scale/rotate.');
   }
