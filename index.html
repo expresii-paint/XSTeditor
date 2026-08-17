@@ -985,7 +985,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       let nh='<g class="node-layer">';
       if(s) s.frames.forEach((f,fi)=>{
         const X=tx(f.x), Y=ty(f.y);
-        const isSel = fi===selectedNode;
+        const isSel = fi===selectedNode || selNodes.has(fi);
         const r = isSel?4.2:3.2;
         nh+='<circle class="node-pt'+(isSel?' sel':'')+'" data-fi="'+fi+'" cx="'+X.toFixed(1)+'" cy="'+Y.toFixed(1)+'" r="'+r+'"'+(f.pressure>0?'':' stroke-dasharray="2 1.5"')+'/>';
       });
@@ -1229,14 +1229,16 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   // editMode mirrors this: 'node' only while the Node Tool is active.
   let tool='selector';             // 'selector' | 'node'
   let editMode='off';              // 'off' | 'node' (== 'node' iff tool==='node')
-  let selectedNode=-1;            // frame index of the currently selected node (-1 = none)
+  let selectedNode=-1;            // frame index of the PRIMARY selected node (-1 = none)
+  let selNodes=new Set();        // Node Tool: frame indices of ALL selected nodes (group marquee / toggle)
+  let nodeMarquee=false;         // true while a Node-Tool node rubber-band drag is active
   let nodeDrag=null;              // {si, fi, start} while dragging a node
   let nodeMenuFor=null;           // {si, fi} target of the open node popup menu
   function setTool(t){
     if(t!=='selector' && t!=='node') return;
     tool=t;
     editMode = t==='node' ? 'node' : 'off';
-    selectedNode=-1; nodeDrag=null; hideNodeMenu();
+    selectedNode=-1; selNodes.clear(); nodeDrag=null; hideNodeMenu();
     $('selToolBtn').classList.toggle('active', tool==='selector');
     $('nodeToolBtn').classList.toggle('active', tool==='node');
     document.body.classList.toggle('node-tool', tool==='node');
@@ -1458,7 +1460,10 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       if(np){
         const fi=+np.dataset.fi;
         if(selected>=0){
-          selectedNode=fi;
+          // toggle this node into the group selection (shift/ctrl adds, plain click sets sole)
+          if(additive){ if(selNodes.has(fi)) selNodes.delete(fi); else selNodes.add(fi); }
+          else { selNodes.clear(); selNodes.add(fi); }
+          selectedNode = fi;
           pushHistory();
           nodeDrag={si:selected, fi, moved:false, startX:e.clientX, startY:e.clientY};
           svgEl.style.cursor='grabbing';
@@ -1533,6 +1538,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       if(!selSet.has(downSi)){ selectStroke(downSi); } // unselected stroke -> select it, then drag just it
       else if(!additive){ clickSelectedToggle = true; /* already selected, no modifier -> toggling interaction mode on click (mouseup, if no drag) */ }
       dragMode='stroke'; dragSi=downSi; svgEl.style.cursor='move'; pushHistory();
+    } else if(tool==='node'){
+      dragMode='marquee'; nodeMarquee=true; // Node Tool: rubber-band selects a group of NODES
     } else {
       dragMode='marquee'; // rubber-band; may become a plain empty click on mouseup
     }
@@ -1635,14 +1642,15 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     // Node-edit: dragging a single frame node.
     if(nodeDrag){
       const s=doc.tree.strokes[nodeDrag.si];
-      const f=s.frames[nodeDrag.fi];
-      if(f){
-        const b=toSvg(e.clientX,e.clientY);
-        const d=svgToData(b.x,b.y);
-        f.x=d.x; f.y=d.y; f.changed=true;
-        nodeDrag.moved=true;
-        renderPreview();
-      }
+      const b=toSvg(e.clientX,e.clientY);
+      const d=svgToData(b.x,b.y);
+      const start=toSvg(nodeDrag.startX,nodeDrag.startY);
+      const ds=svgToData(start.x,start.y);
+      const dxd=d.x-ds.x, dyd=d.y-ds.y;
+      const fis= selNodes.has(nodeDrag.fi) ? [...selNodes] : [nodeDrag.fi];
+      for(const fi of fis){ const f=s.frames[fi]; if(f){ f.x+=dxd; f.y+=dyd; f.changed=true; } }
+      nodeDrag.moved=true;
+      renderPreview();
       return;
     }
     if(dragMode==='none') return;
@@ -1685,7 +1693,22 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       else if(!moved && selSet.size>1 && downSi>=0 && !additive){ selectStroke(downSi); }
     } else if(dragMode==='marquee'){
       hideMarquee();
-      if(moved){
+      if(nodeMarquee){
+        // Node Tool: rubber-band selects every node of the active stroke inside the rect.
+        if(moved && selected>=0){
+          const a=toSvg(startX,startY), b=toSvg(e.clientX,e.clientY);
+          const m={x0:Math.min(a.x,b.x),y0:Math.min(a.y,b.y),x1:Math.max(a.x,b.x),y1:Math.max(a.y,b.y)};
+          const picked=[]; document.querySelectorAll('.node-pt').forEach(c=>{
+            const x=+c.getAttribute('cx'), y=+c.getAttribute('cy');
+            if(x>=m.x0&&x<=m.x1&&y>=m.y0&&y<=m.y1) picked.push(+c.dataset.fi);
+          });
+          if(!additive) selNodes.clear();
+          picked.forEach(fi=>selNodes.add(fi));
+          if(picked.length && selectedNode<0) selectedNode=picked[0];
+          renderPreview();
+        } else if(!moved && !additive){ selNodes.clear(); selectedNode=-1; renderPreview(); }
+        nodeMarquee=false;
+      } else if(moved){
         const a=toSvg(startX,startY), b=toSvg(e.clientX,e.clientY);
         const m={x0:Math.min(a.x,b.x),y0:Math.min(a.y,b.y),x1:Math.max(a.x,b.x),y1:Math.max(a.y,b.y)};
         const hit=[]; doc.tree.strokes.forEach((s,si)=>{ if(marqueeHitsStroke(si, m)) hit.push(si); });
