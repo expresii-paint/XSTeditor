@@ -1017,7 +1017,10 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
 
   /* ---------- preview (whole paper) ---------- */
   function renderPreview(){
-    const svg=$('svg'); const W=820,H=820;
+    const svg=$('svg');
+    const box=$('canvasBox');
+    // Size the SVG to fill the canvas area so the preview uses the whole window (no white margin).
+    const W=Math.max(200, box.clientWidth), H=Math.max(200, box.clientHeight);
     svg.setAttribute('width',W); svg.setAttribute('height',H); svg.setAttribute('viewBox','0 0 '+W+' '+H);
     const frames=allFrames();
     if(!frames.length){ svg.innerHTML='<text x="50%" y="50%" fill="#999" text-anchor="middle" font-size="16">No strokes</text>'; $('legend').textContent=''; return; }
@@ -1055,29 +1058,31 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       if(cy>=pad-0.5 && cy<=H-pad+0.5) out+='<line x1="'+pad+'" y1="'+cy.toFixed(1)+'" x2="'+(W-pad)+'" y2="'+cy.toFixed(1)+'"/>';
     }
     out+='</g>';
-    // Paper boundary (dashed) when visible.
+    // Paper boundary (dashed) — always drawn (the SVG clips it). Never hidden when content overfills.
     const bx0=tx(-EX), bx1=tx(EX), by0=ty(-EY), by1=ty(EY);
-    if(bx0>=pad&&bx1<=W-pad&&by0>=pad&&by1<=H-pad)
-      out+='<rect x="'+bx0.toFixed(1)+'" y="'+by0.toFixed(1)+'" width="'+(bx1-bx0).toFixed(1)+'" height="'+(by1-by0).toFixed(1)+'" fill="none" stroke="#bbb" stroke-dasharray="4 4"/>';
-    // X / Y axes through the paper origin (0,0), drawn only when the paper box (the -5..+5
-    // world square) is visible. Expresii convention: +X right (red), +Y down (blue).
-    if(pad<=bx0&&bx1<=W-pad&&pad<=by0&&by1<=H-pad){
+    out+='<rect x="'+bx0.toFixed(1)+'" y="'+by0.toFixed(1)+'" width="'+(bx1-bx0).toFixed(1)+'" height="'+(by1-by0).toFixed(1)+'" fill="none" stroke="#bbb" stroke-dasharray="4 4"/>';
+    // X / Y axes through the paper origin (0,0), always drawn (SVG clips them).
+    // Expresii convention: +X right (red), +Y down (blue).
+    {
       const ox=tx(0), oy=ty(0);
       const fmt=v=>(Math.round(v*1e4)/1e4).toString();
+      // Nudge the '0' labels inward by a few px when the origin sits on/beyond an edge, so they stay readable.
+      const zeroX = (ox<pad+6) ? pad+6 : (ox>W-pad-6 ? W-pad-6 : ox);
+      const zeroY = (oy<pad+6) ? pad+6 : (oy>H-pad-6 ? H-pad-6 : oy);
       out+='<g font-size="11" font-family="monospace">';
       // X axis (red) — horizontal line through world y=0, spanning the paper box
       out+='<line x1="'+bx0.toFixed(1)+'" y1="'+oy.toFixed(1)+'" x2="'+bx1.toFixed(1)+'" y2="'+oy.toFixed(1)+'" stroke="#d33" stroke-width="1.5"/>';
       // Y axis (blue) — vertical line through world x=0, spanning the paper box
       out+='<line x1="'+ox.toFixed(1)+'" y1="'+by0.toFixed(1)+'" x2="'+ox.toFixed(1)+'" y2="'+by1.toFixed(1)+'" stroke="#36c" stroke-width="1.5"/>';
       out+='<circle cx="'+ox.toFixed(1)+'" cy="'+oy.toFixed(1)+'" r="3" fill="#000"/>';
-      // X-axis world-coordinate labels (red): -EX · 0 · +EX
+      // X-axis world-coordinate labels (red): -EX · 0 · +EX (the ±EX labels ride the box edge, inside it)
       out+='<text x="'+(bx0+3).toFixed(1)+'" y="'+(oy-4).toFixed(1)+'" fill="#d33">'+fmt(-EX)+'</text>';
-      out+='<text x="'+(ox+4).toFixed(1)+'" y="'+(oy-4).toFixed(1)+'" fill="#d33">0</text>';
+      out+='<text x="'+(zeroX+4).toFixed(1)+'" y="'+(oy-4).toFixed(1)+'" fill="#d33">0</text>';
       out+='<text x="'+(bx1-3).toFixed(1)+'" y="'+(oy-4).toFixed(1)+'" fill="#d33" text-anchor="end">'+fmt(EX)+'</text>';
       out+='<text x="'+(bx1-3).toFixed(1)+'" y="'+(oy+15).toFixed(1)+'" fill="#d33" text-anchor="end">+X</text>';
       // Y-axis world-coordinate labels (blue): +EY · 0 · -EY
       out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by0+12).toFixed(1)+'" fill="#36c">'+fmt(EY)+'</text>';
-      out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(oy+4).toFixed(1)+'" fill="#36c">0</text>';
+      out+='<text x="'+(zeroX+5).toFixed(1)+'" y="'+(zeroY+4).toFixed(1)+'" fill="#36c">0</text>';
       out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by1-3).toFixed(1)+'" fill="#36c">'+fmt(-EY)+'</text>';
       out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by1+14).toFixed(1)+'" fill="#36c">+Y (down)</text>';
       out+='</g>';
@@ -1141,6 +1146,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   }
 
   function renderAll(){ renderGlobalParams(); renderGradient(); renderLayers(); renderStrokeList(); renderTree(); renderFrameTable(); renderPreview(); updateStat(); }
+  // Refit the preview when the window (and thus the canvas area) resizes.
+  let _rsz; window.addEventListener('resize',()=>{ clearTimeout(_rsz); _rsz=setTimeout(()=>{ if(!frozenView) renderPreview(); },120); });
   function zoomToFit(){
     // The base preview mapping already normalizes content to fit the canvas at zoom=1
     // (content spans (820-2*pad)*zoom px regardless of extent), so "fit" == reset zoom + pan.
