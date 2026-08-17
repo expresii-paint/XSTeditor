@@ -1965,7 +1965,11 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
 
   $('weight').oninput=e=>{view.weight=+e.target.value;renderPreview();};
   document.querySelectorAll('input[name=cmode]').forEach(r=>r.onchange=e=>{view.colorMode=e.target.value;renderPreview();});
-  document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}
+  document.addEventListener('keydown',e=>{
+    // While the Save dialog is open, route keys to the dialog (Enter saves, Escape closes)
+    // and keep them away from the main app's tool/delete/undo shortcuts.
+    if(!saveModal.hidden) return;
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo();}
     else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo();}
     else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==='u'||e.key==='r')){
       // Clean up commands undone: 'u' = Undo-command cleanup, 'r' = Redo-command cleanup
