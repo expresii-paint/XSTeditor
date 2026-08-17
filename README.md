@@ -31,13 +31,19 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
   flip / pressure fields for the single selected stroke.
 - **Edit** per-frame coordinates in the frames table (x, y, z, pitch, roll, turn, pressure);
   insert/delete the cursor frame.
-- **Node edit mode** — click **Node edit** in the top toolbar (or press `n`) to switch
-  into node-editing. With a stroke selected, every `s`-frame of that stroke is shown as a
-  draggable **node** on the preview. Drag a node to move that single frame (pressure stays
-  the same, position is re-projected through the current zoom/flip); right-click a node for
-  a popup menu where you can **Delete node**. Node moves are recorded in the undo history
-  and baked into the stroke coordinates, so they flow through **Save** and **Send selected**.
-  Pen-up (`pressure 0`) nodes are drawn dashed so you can tell them apart from ink nodes.
+- **Tools (Inkscape-like, mutually exclusive)** in the top toolbar:
+  - **Selector Tool** (default) — select & transform strokes. A selected stroke gets the
+    transform handles: 4 **corner** nodes (scale in scale-mode, rotate in rotate-mode) and
+    4 **edge-midpoint** nodes (scale/shear). Click a selected stroke to toggle scale/rotate.
+  - **Node Tool** — edit individual stroke nodes. A selected stroke shows only a plain
+    marquee around it (no transform handles); each `s`-frame is a draggable **node**.
+    Drag a node to move that single frame (pressure stays the same, position is re-projected
+    through the current zoom/flip); right-click a node for a popup menu where you can
+    **Delete node**. Node moves are recorded in the undo history and baked into the stroke
+    coordinates, so they flow through **Save** and **Send selected**. Pen-up (`pressure 0`)
+    nodes are drawn dashed so you can tell them apart from ink nodes.
+  - Press `n` to toggle between the two tools. The tools are exclusive: when the Selector
+    Tool is active the Node Tool is not, and vice-versa.
 - **Clean up commands undone** — Expresii records an *undo* as a single `u` stream
   command and a *redo* as `r` (each discards or restores the most-recently-drawn
   stroke). Those `u`/`r` commands — and the strokes they undo — stay in the file, so a

@@ -137,8 +137,14 @@
   .expresii-group .expresii-label{color:var(--dim);font-size:12px}
   .expresii-group input{width:150px;background:var(--panel2);border:1px solid var(--line);border-radius:5px;color:var(--txt);padding:4px 6px;font-size:12px}
   .sep{width:1px;height:22px;background:var(--line)}
-  /* Node-edit mode toggle (top toolbar) */
-  #nodeEditBtn.on{background:var(--accent);color:#06202b;border-color:var(--accent)}
+  /* Inkscape-like exclusive tool group (Selector / Node) */
+  .tool-group{display:flex;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .tool-btn{display:flex;align-items:center;gap:5px;background:var(--panel2);border:none;color:var(--txt);
+    padding:5px 9px;font-size:12px;cursor:pointer;border-right:1px solid var(--line)}
+  .tool-btn:last-child{border-right:none}
+  .tool-btn:hover{background:#2a3340}
+  .tool-btn.active{background:var(--accent);color:#06202b}
+  .tool-btn.active:hover{background:var(--accent)}
   /* Per-frame editable nodes (Node edit mode) */
   .node-pt{fill:#0b7;stroke:#fff;stroke-width:1.2;cursor:grab}
   .node-pt:hover{fill:#0e9}
@@ -169,7 +175,16 @@
   <button id="undoBtn" title="Ctrl+Z">Undo</button>
   <button id="redoBtn" title="Ctrl+Y">Redo</button>
   <span class="sep"></span>
-  <button id="nodeEditBtn" title="Node edit mode (n) — edit individual stroke nodes">Node edit</button>
+  <div class="tool-group" role="toolbar" aria-label="Tools">
+    <button id="selToolBtn" class="tool-btn active" title="Selector Tool — select &amp; transform strokes (drag corner/midpoint handles)">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 2 L2 12 L5 9 L7 14 L9 13 L7 8 L11 8 Z" fill="currentColor"/></svg>
+      <span>Selector</span>
+    </button>
+    <button id="nodeToolBtn" class="tool-btn" title="Node Tool — edit individual stroke nodes (drag nodes, right-click to delete)">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+      <span>Node</span>
+    </button>
+  </div>
   <span class="sep"></span>
   <span class="expresii-group">
     <span class="expresii-label">Expresii</span>
@@ -1137,7 +1152,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
 
   $('addStrokeBtn').onclick=addStroke;
   $('cleanUndoBtn').onclick=cleanUpUndone;
-  $('nodeEditBtn').onclick=toggleNodeEdit;
+  $('selToolBtn').onclick=()=>setTool('selector');
+  $('nodeToolBtn').onclick=()=>setTool('node');
   $('dupStrokeBtn').onclick=()=>{ if(selected>=0) duplicateStroke(selected); else msg('Select a stroke first'); };
   $('applyTf').onclick=applyTransform; $('resetTf').onclick=resetTfInputs;
   $('insFrame').onclick=()=>{ if(selected<0) return; const s=doc.tree.strokes[selected]; pushHistory();
@@ -1167,18 +1183,24 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   // 'rotate' swaps so the 4 corners rotate (around the selection centre) and the 4 edge
   // midpoints shear (around the opposite edge). Clicking a selected stroke toggles it.
   let interactionMode='scale';
-  // Node-edit mode: when ON, clicking a stroke selects it and each s-frame of the
-  // selected stroke is shown as a draggable node; right-click a node for a popup menu.
-  let editMode='off';             // 'off' | 'node'
+  // ---- Tools (Inkscape-like, mutually exclusive) ----
+  // 'selector' -> select & transform strokes (corner/midpoint control handles).
+  // 'node'      -> edit individual stroke nodes (per-frame draggable nodes).
+  // editMode mirrors this: 'node' only while the Node Tool is active.
+  let tool='selector';             // 'selector' | 'node'
+  let editMode='off';              // 'off' | 'node' (== 'node' iff tool==='node')
   let selectedNode=-1;            // frame index of the currently selected node (-1 = none)
   let nodeDrag=null;              // {si, fi, start} while dragging a node
   let nodeMenuFor=null;           // {si, fi} target of the open node popup menu
-  function toggleNodeEdit(){
-    editMode = editMode==='node' ? 'off' : 'node';
+  function setTool(t){
+    if(t!=='selector' && t!=='node') return;
+    tool=t;
+    editMode = t==='node' ? 'node' : 'off';
     selectedNode=-1; nodeDrag=null; hideNodeMenu();
-    $('nodeEditBtn').classList.toggle('on', editMode==='node');
+    $('selToolBtn').classList.toggle('active', tool==='selector');
+    $('nodeToolBtn').classList.toggle('active', tool==='node');
     renderAll();
-    msg(editMode==='node' ? 'Node edit ON — click a stroke, then drag nodes or right-click a node.' : 'Node edit OFF');
+    msg(tool==='node' ? 'Node Tool — click a stroke, then drag nodes or right-click a node.' : 'Selector Tool — drag handles to transform; click a stroke to switch scale/rotate.');
   }
 
   let editFrameDrag = null; // {mode:'resize'|'rotate', handle:'tl'|'tr'|'bl'|'br'|'t'|'b'|'l'|'r'|'rot', startRect, startAngle, pivot, selIndices[]}
@@ -1266,6 +1288,11 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     const {x0, y0, x1, y1} = bounds;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const w = x1 - x0, h = y1 - y0;
+    // Node Tool: show only a plain marquee around the selection — no transform handles
+    // (the per-frame nodes are drawn separately by renderPreview).
+    if(tool==='node'){
+      return '<g class="edit-frame ef-node"><rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="none" stroke="#0b7" stroke-width="1.5" stroke-dasharray="4 4" pointer-events="none"/></g>';
+    }
     const hs = 10; // handle size (larger for easier grabbing)
     // Frame rect + handles. The bounding rectangle must NOT capture clicks (so clicking a
     // stroke inside the frame grabs the stroke, not the rect). Handles use pointer-events:all.
@@ -1694,9 +1721,9 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       e.preventDefault(); cleanUpUndone();
     }
     else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==='n'||e.key==='N')){
-      // Toggle Node-edit mode. Ignore when typing in a field.
+      // Toggle between the two exclusive tools (Selector <-> Node).
       const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
-      e.preventDefault(); toggleNodeEdit();
+      e.preventDefault(); setTool(tool==='node' ? 'selector' : 'node');
     } });
   const tfDx=$('tfDx'),tfDy=$('tfDy'),tfScale=$('tfScale'),tfRot=$('tfRot'),tfFlipX=$('tfFlipX'),tfFlipY=$('tfFlipY'),tfPmul=$('tfPmul'),tfPadd=$('tfPadd'),tfZadd=$('tfZadd');
 
