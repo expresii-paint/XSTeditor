@@ -516,6 +516,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   const view={zoom:1,flipY:false,showFrames:false,colorMode:'stroke',weight:12,panX:0,panY:0};
   let previewScale=1, previewFlipY=false;   // live preview scale / flip, for inverting mouse drags to data space
   let pv=null;                               // cached preview mapping for marquee hit-testing
+  let frozenView=null;                       // when set (during a node drag), renderPreview reuses this mapping instead of refitting to bounds (so the grabbed node tracks the cursor 1:1)
   const history=[], future=[];
   const PALETTE=['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4',
                  '#f032e6','#bfef45','#fabed4','#469990','#dcbeff','#9a6324','#800000','#808000'];
@@ -892,8 +893,12 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     svg.setAttribute('width',W); svg.setAttribute('height',H); svg.setAttribute('viewBox','0 0 '+W+' '+H);
     const frames=allFrames();
     if(!frames.length){ svg.innerHTML='<text x="50%" y="50%" fill="#999" text-anchor="middle" font-size="16">No strokes</text>'; $('legend').textContent=''; return; }
-    let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
-    for(const o of frames){ if(o.x<minX)minX=o.x; if(o.x>maxX)maxX=o.x; if(o.y<minY)minY=o.y; if(o.y>maxY)maxY=o.y; }
+    let minX,maxX,minY,maxY;
+    if(frozenView){ ({minX,maxX,minY,maxY}=frozenView); }
+    else {
+      minX=1e9;maxX=-1e9;minY=1e9;maxY=-1e9;
+      for(const o of frames){ if(o.x<minX)minX=o.x; if(o.x>maxX)maxX=o.x; if(o.y<minY)minY=o.y; if(o.y>maxY)maxY=o.y; }
+    }
     const pad=24, z=view.zoom;
     const s=Math.min((W-2*pad)/((maxX-minX)||1),(H-2*pad)/((maxY-minY)||1))*z;
     previewScale=s; previewFlipY=view.flipY;
@@ -1238,7 +1243,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     if(t!=='selector' && t!=='node') return;
     tool=t;
     editMode = t==='node' ? 'node' : 'off';
-    selectedNode=-1; selNodes.clear(); nodeDrag=null; hideNodeMenu();
+    selectedNode=-1; selNodes.clear(); nodeDrag=null; frozenView=null; hideNodeMenu();
     $('selToolBtn').classList.toggle('active', tool==='selector');
     $('nodeToolBtn').classList.toggle('active', tool==='node');
     document.body.classList.toggle('node-tool', tool==='node');
@@ -1460,12 +1465,22 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       if(np){
         const fi=+np.dataset.fi;
         if(selected>=0){
-          // toggle this node into the group selection (shift/ctrl adds, plain click sets sole)
+          // Selection: shift/ctrl toggles this node in the group. A plain click keeps the
+          // existing group if the node is ALREADY selected (so dragging moves the whole group),
+          // otherwise it collapses the selection to just this node.
           if(additive){ if(selNodes.has(fi)) selNodes.delete(fi); else selNodes.add(fi); }
-          else { selNodes.clear(); selNodes.add(fi); }
+          else if(!selNodes.has(fi)){ selNodes.clear(); selNodes.add(fi); }
           selectedNode = fi;
           pushHistory();
-          nodeDrag={si:selected, fi, moved:false, startX:e.clientX, startY:e.clientY};
+          // Snapshot original positions of every node that will move (the whole group),
+          // so the drag can be applied as an absolute offset from the mouse-start (node follows the cursor exactly).
+          // Freeze the view mapping for the duration of this drag so renderPreview stops
+          // refitting to bounds — the grabbed node then tracks the cursor 1:1.
+          frozenView={minX:pv.minX,maxX:pv.maxX,minY:pv.minY,maxY:pv.maxY};
+          // Nodes that move: the whole group if grabbing an already-selected node, otherwise just it.
+          const groupFis = (additive || selNodes.has(fi)) ? [...selNodes] : [fi];
+          const origPos = groupFis.map(gfi => { const gf=doc.tree.strokes[selected].frames[gfi]; return {fi:gfi, x:gf.x, y:gf.y}; });
+          nodeDrag={si:selected, fi, moved:false, startX:e.clientX, startY:e.clientY, origPos};
           svgEl.style.cursor='grabbing';
           e.stopPropagation(); e.preventDefault();
           renderPreview();
@@ -1642,13 +1657,17 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     // Node-edit: dragging a single frame node.
     if(nodeDrag){
       const s=doc.tree.strokes[nodeDrag.si];
-      const b=toSvg(e.clientX,e.clientY);
-      const d=svgToData(b.x,b.y);
-      const start=toSvg(nodeDrag.startX,nodeDrag.startY);
-      const ds=svgToData(start.x,start.y);
-      const dxd=d.x-ds.x, dyd=d.y-ds.y;
-      const fis= selNodes.has(nodeDrag.fi) ? [...selNodes] : [nodeDrag.fi];
-      for(const fi of fis){ const f=s.frames[fi]; if(f){ f.x+=dxd; f.y+=dyd; f.changed=true; } }
+      // The preview refits to bounds on every render, so the view scale (previewScale*zoom) and
+      // bounds (pv.*) shift DURING the drag. Recompute the mapping from the CURRENT render so the
+      // grabbed node lands EXACTLY under the cursor (1:1 tracking) regardless of refit.
+      const S=previewScale*view.zoom;
+      const cur=toSvg(e.clientX,e.clientY);
+      const g=pv; // current cached mapping (refreshed by the last render)
+      const grab=nodeDrag.origPos.find(o=>o.fi===nodeDrag.fi);
+      const nx = g.minX + (cur.x - g.pad - g.panX)/S;
+      const ny = g.flip ? g.maxY - (cur.y - g.pad - g.panY)/S : g.minY + (cur.y - g.pad - g.panY)/S;
+      const dxd=nx-grab.x, dyd=ny-grab.y;
+      for(const o of nodeDrag.origPos){ const f=s.frames[o.fi]; if(f){ f.x=o.x+dxd; f.y=o.y+dyd; f.changed=true; } }
       nodeDrag.moved=true;
       renderPreview();
       return;
@@ -1680,7 +1699,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       const wasMoved=nodeDrag.moved;
       nodeDrag=null;
       svgEl.style.cursor='';
-      if(wasMoved) afterChange(); else renderPreview();
+      if(wasMoved) afterChange(); else renderPreview();   // render WITH frozenView still set, so the node rests exactly where it was dragged
+      frozenView=null;   // unfreeze AFTER the final render, so subsequent renders refit to bounds again
       return;
     }
     if(dragMode==='stroke'){
