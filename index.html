@@ -204,7 +204,6 @@
     <div id="previewBar">
       <button id="zoomFit" title="Zoom to fit">Zoom to fit</button>
       <span class="range">Zoom <input id="zoom" type="range" min="0.2" max="40" step="0.1" value="1" style="width:120px"> <b id="zoomVal" style="min-width:42px;display:inline-block;text-align:right">1.0×</b></span>
-      <label><input id="flipY" type="checkbox"> Flip Y</label>
       <label><input id="showFrames" type="checkbox"> Frame dots</label>
       <label><input id="colorStroke" type="radio" name="cmode" value="stroke" checked> Color by stroke</label>
       <label><input id="colorInk" type="radio" name="cmode" value="ink"> Ink (pressure)</label>
@@ -1740,7 +1739,6 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     msg('Deleted node from stroke #'+(selected+1)+'.');
   }
 
-  $('flipY').onchange=e=>{view.flipY=e.target.checked;renderPreview();};
   $('showFrames').onchange=e=>{view.showFrames=e.target.checked;renderPreview();};
   $('weight').oninput=e=>{view.weight=+e.target.value;renderPreview();};
   document.querySelectorAll('input[name=cmode]').forEach(r=>r.onchange=e=>{view.colorMode=e.target.value;renderPreview();});
