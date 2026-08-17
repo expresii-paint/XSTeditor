@@ -638,6 +638,22 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     const ns=new Set(); for(const x of selSet){ if(x<si) ns.add(x); else if(x>si) ns.add(x-1); } selSet.clear(); ns.forEach(x=>selSet.add(x));
     if(selected===si) selected=selSet.size?Math.min(si,doc.tree.strokes.length-1):-1; cursorFrame=-1; afterChange();
   }
+  // Delete every currently selected stroke group (Selector Tool). Runs in descending index
+  // order so earlier removals don't shift still-pending indices; a single undo entry is pushed.
+  function deleteSelectedStrokes(){
+    if(selSet.size===0) return;
+    pushHistory();
+    const idx=[...selSet].sort((a,b)=>b-a);   // high -> low
+    for(const si of idx){
+      if(si<0 || si>=doc.tree.strokes.length) continue;
+      const prevSi=si-1, nextSi=si+1;
+      doc.tree.strokes.splice(si,1);
+      if(prevSi>=0 && prevSi<doc.tree.strokes.length) ensureBrushEnds(doc.tree.strokes[prevSi]);
+      if(nextSi>=0 && nextSi<doc.tree.strokes.length) ensureBrushEnds(doc.tree.strokes[nextSi]);
+    }
+    selSet.clear(); selected=-1; cursorFrame=-1; afterChange();
+    msg('Deleted '+idx.length+' stroke'+(idx.length>1?'s':''));
+  }
   // Guarantee a stroke starts with a brush-DOWN head and ends with a brush-UP tail.
   // A head/tail frame is a pen-up: pressure 0, same x/y/z as the adjacent ink node.
   function ensureBrushEnds(s){
@@ -1761,9 +1777,11 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       e.preventDefault(); setTool(tool==='node' ? 'selector' : 'node');
     }
     else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==='Delete'||e.key==='Del'||e.key==='Backspace')){
-      // 'Del' deletes the currently selected node (Node Tool only). Guard against typing in a field.
+      // 'Del' deletes the currently selected node (Node Tool) or the selected stroke group(s)
+      // (Selector Tool). Guard against typing in a field.
       const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
       if(editMode==='node' && selected>=0 && selectedNode>=0){ e.preventDefault(); deleteSelectedNode(); }
+      else if(tool==='selector' && selSet.size>0){ e.preventDefault(); deleteSelectedStrokes(); }
     } });
   const tfDx=$('tfDx'),tfDy=$('tfDy'),tfScale=$('tfScale'),tfRot=$('tfRot'),tfFlipX=$('tfFlipX'),tfFlipY=$('tfFlipY'),tfPmul=$('tfPmul'),tfPadd=$('tfPadd'),tfZadd=$('tfZadd');
 
