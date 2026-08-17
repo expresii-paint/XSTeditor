@@ -1480,7 +1480,11 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
           // Nodes that move: the whole group if grabbing an already-selected node, otherwise just it.
           const groupFis = (additive || selNodes.has(fi)) ? [...selNodes] : [fi];
           const origPos = groupFis.map(gfi => { const gf=doc.tree.strokes[selected].frames[gfi]; return {fi:gfi, x:gf.x, y:gf.y}; });
-          nodeDrag={si:selected, fi, moved:false, startX:e.clientX, startY:e.clientY, origPos};
+          // Remember where the cursor was in DATA space at grab-time, so the whole group moves by
+          // (cursorNow - cursorStart) — preserving the exact grab offset (no initial jump).
+          const sb=toSvg(e.clientX,e.clientY); const S0=previewScale*view.zoom;
+          const startData={ x: pv.minX + (sb.x - pv.pad - pv.panX)/S0, y: pv.flip ? pv.maxY - (sb.y - pv.pad - pv.panY)/S0 : pv.minY + (sb.y - pv.pad - pv.panY)/S0 };
+          nodeDrag={si:selected, fi, moved:false, startX:e.clientX, startY:e.clientY, origPos, startData};
           svgEl.style.cursor='grabbing';
           e.stopPropagation(); e.preventDefault();
           renderPreview();
@@ -1659,14 +1663,14 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       const s=doc.tree.strokes[nodeDrag.si];
       // The preview refits to bounds on every render, so the view scale (previewScale*zoom) and
       // bounds (pv.*) shift DURING the drag. Recompute the mapping from the CURRENT render so the
-      // grabbed node lands EXACTLY under the cursor (1:1 tracking) regardless of refit.
+      // move is exact regardless of refit. Move the group by (cursorNow - cursorStart) in DATA space,
+      // which preserves the exact grab offset (no initial jump, no snap).
       const S=previewScale*view.zoom;
       const cur=toSvg(e.clientX,e.clientY);
       const g=pv; // current cached mapping (refreshed by the last render)
-      const grab=nodeDrag.origPos.find(o=>o.fi===nodeDrag.fi);
       const nx = g.minX + (cur.x - g.pad - g.panX)/S;
       const ny = g.flip ? g.maxY - (cur.y - g.pad - g.panY)/S : g.minY + (cur.y - g.pad - g.panY)/S;
-      const dxd=nx-grab.x, dyd=ny-grab.y;
+      const dxd=nx-nodeDrag.startData.x, dyd=ny-nodeDrag.startData.y;
       for(const o of nodeDrag.origPos){ const f=s.frames[o.fi]; if(f){ f.x=o.x+dxd; f.y=o.y+dyd; f.changed=true; } }
       nodeDrag.moved=true;
       renderPreview();
