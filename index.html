@@ -1260,12 +1260,23 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   // so the written .xst replays the edited spline through Expresii's brush engine.
   function syncSplineFrames(){ if(!splineMode) return; for(const st of doc.tree.strokes){ if(st.cps && st.cps.length) st.frames=splineToFrames(st, splineDensity); } }
 
+  // --- Remember the last save folder (FileSystemDirectoryHandle) so the native Save-As
+  //     dialog opens there next time. Plain downloads can't honor a folder, so this applies
+  //     only to the system Save-As path.
+  const SAVE_FOLDER_KEY='xst-save-folder';
+  let savedFolderHandle=null;
+  function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open('xst-editor',1); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+  async function idbGet(key){ const db=await idbOpen(); return new Promise((res,rej)=>{ const rq=db.transaction('kv','readonly').objectStore('kv').get(key); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); }
+  async function idbSet(key,val){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').put(val,key); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+  async function loadSavedFolder(){ try{ savedFolderHandle = await idbGet(SAVE_FOLDER_KEY) || null; }catch(e){ savedFolderHandle=null; } }
+  async function rememberFolder(handle){ if(!handle) return; savedFolderHandle=handle; try{ await idbSet(SAVE_FOLDER_KEY, handle); }catch(e){} }
+
   // --- Save dialog (filename + location) ---
   const saveModal=$('saveModal');
   function openSaveDialog(){
     if(doc.tree.strokes.length===0){ msg('Nothing to save (no strokes)'); return; }
     $('saveName').value=defaultSaveName();
-    $('savePath').textContent='— (browser default Downloads)';
+    $('savePath').textContent = savedFolderHandle ? '📁 '+savedFolderHandle.name : '— (browser default Downloads)';
     saveModal.hidden=false;
     $('saveName').focus(); $('saveName').select();
   }
@@ -1287,12 +1298,14 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     try{
       if(typeof window.showSaveFilePicker!=='function'){ saveDownload(); return; }
       const opts={ suggestedName:name, types:[{description:'Expresii Stroke File', accept:{'text/plain':['.xst','.txt']}}] };
+      if(savedFolderHandle){ try{ opts.startIn=savedFolderHandle; }catch(e){} }
       const handle=await window.showSaveFilePicker(opts);
       const writable=await handle.createWritable();
       syncSplineFrames();
       await writable.write(currentXSTText());
       await writable.close();
       currentName=handle.name; updateStat(); closeSaveDialog(); msg('Saved '+handle.name);
+      if(handle.getDirectory){ try{ await rememberFolder(await handle.getDirectory()); }catch(e){} }
     }catch(err){
       if(err && err.name==='AbortError') return;          // user cancelled the system dialog
       console.warn('showSaveFilePicker failed, falling back to download', err);
@@ -2102,6 +2115,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   afterChange();
   // Show the app build version next to the title (single source of truth: APP_VERSION).
   $('appVer').textContent = 'v' + APP_VERSION;
+  loadSavedFolder();  // restore last-used save folder for the native Save-As dialog
 })();
 }
 
