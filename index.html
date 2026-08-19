@@ -22,6 +22,7 @@
   header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);
     border-bottom:1px solid var(--line);flex-wrap:wrap}
   header h1{font-size:14px;margin:0;font-weight:600;color:var(--accent)}
+  header h1 .ver{font-size:11px;font-weight:500;color:var(--dim);background:var(--panel,#1b1d22);border:1px solid var(--border,#2a2d34);border-radius:6px;padding:1px 6px;margin-left:8px;vertical-align:middle}
   header .spacer{flex:1}
   button,select,input{font:inherit;color:var(--txt)}
   button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
@@ -162,7 +163,7 @@
 </head>
 <body>
 <header>
-  <h1>XST Editor</h1>
+  <h1 id="appTitle">XST Editor<span class="ver" id="appVer"></span></h1>
   <button id="openBtn" class="primary">Open .xst</button>
   <div class="dropdown">
     <button id="newBtn">New ▾</button>
@@ -351,6 +352,7 @@
 <script>
 /* ===================== PURE MODEL: parse / build-tree / emit (no DOM) ===================== */
 const SCALAR_CMDS = ['T','w','C','B','e','k','i'];
+const APP_VERSION = '0.2.0';  // app build version, shown next to the title
 
 function formatNum(v){
   if(!isFinite(v)) return '0';
@@ -2094,6 +2096,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   // Start with an empty document (no demo strokes on launch).
   doc.tree={prelude:[],strokes:[],trailing:[]};
   afterChange();
+  // Show the app build version next to the title (single source of truth: APP_VERSION).
+  $('appVer').textContent = 'v' + APP_VERSION;
 })();
 }
 
@@ -2114,7 +2118,6 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     h.addEventListener('click', ()=>{ const id=h.dataset.collapse; panelCollapse[id]=!panelCollapse[id]; saveCollapse(panelCollapse); applyLayout(); });
   });
   applyLayout();
-
 </script>
 </body>
 </html>
