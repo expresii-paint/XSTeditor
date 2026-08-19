@@ -15,7 +15,11 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
   +Y **up**) that fills the whole window, with grid, a dashed −5..+5 world-coordinate paper
   box, labelled axes (red X: −EX · 0 · +EX, blue Y: +EY · 0 · −EY, +Y up), and zoom-to-fit.
   The paper box and axes are always drawn (clipped by the canvas) even when stroke content
-  extends past the ±5 paper edges. Saved files are stamped `v 0.8`.
+  extends past the ±5 paper edges.
+- **Version-aware**: the XST format version is read from the file's first line, e.g.
+  `# Expresii Stroke File v0.7`. Files older than v0.8 used +Y **down**; on open those are
+  auto-flipped to display correctly, and every save writes `# Expresii Stroke File v0.8` as
+  the first line.
 - **Select** strokes:
   - click a stroke to select it,
   - Shift/Ctrl/Cmd-click to toggle multiple,
