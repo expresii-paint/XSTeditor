@@ -350,7 +350,7 @@
 
 <script>
 /* ===================== PURE MODEL: parse / build-tree / emit (no DOM) ===================== */
-const SCALAR_CMDS = ['T','w','C','B','e','k','i','v'];  // 'v' = XST format version (Expresii v0.8: +Y up)
+const SCALAR_CMDS = ['T','w','C','B','e','k','i'];
 
 function formatNum(v){
   if(!isFinite(v)) return '0';
@@ -472,14 +472,28 @@ function flatten(tree){
   return out;
 }
 function parseXST(text){ return {tree: buildTree(text.split('\n').map(parseLine))}; }
-// Expresii XST file version. v0.8 flipped the Y axis: +Y is now UP (like most apps).
-// We stamp 'v 0.8' into the prelude on every emit so saved files declare the convention.
-function ensureVersion(tree){
-  let v=findScalar(tree,'v');
-  if(!v){ v={type:'scalar',cmd:'v',value:0.8,changed:true}; tree.prelude.unshift(v); }
-  else v.value=0.8;
+// Expresii XST files declare their format version on the FIRST LINE as a comment, e.g.
+//   # Expresii Stroke File v0.7
+// v0.8 flipped the Y axis so +Y points UP (like most apps). This editor displays +Y up,
+// so when we OPEN a file whose version is < 0.8 (i.e. +Y down), we flip every stroke's Y
+// so it shows the right way up. On SAVE we always stamp v0.8 as the first line.
+function parseXstVersion(text){
+  const m=(text||'').match(/#\s*Expresii Stroke File v(\d+)\.(\d+)/i);
+  if(!m) return null;
+  return {major:+m[1], minor:+m[2]};
 }
-function emitXST(doc){ ensureVersion(doc.tree); return flatten(doc.tree).map(emitLine).join('\n'); }
+function isLegacyVersion(v){ return !v || v.major<0 || (v.major===0 && v.minor<8); }
+function ensureVersionHeader(tree){
+  const want='Expresii Stroke File v0.8';
+  let idx=-1;
+  for(let i=0;i<tree.prelude.length;i++){ const o=tree.prelude[i]; if(o.type==='comment' && /Expresii Stroke File/i.test(o.text||'')){ idx=i; break; } }
+  if(idx>=0){
+    if((tree.prelude[idx].text||'').trim()===want) return;   // already v0.8: keep verbatim
+    tree.prelude.splice(idx,1);
+  }
+  tree.prelude.unshift({type:'comment', text:want, changed:true});
+}
+function emitXST(doc){ ensureVersionHeader(doc.tree); return flatten(doc.tree).map(emitLine).join('\n'); }
 
 function findScalar(tree,cmd){
   for(const o of tree.prelude) if(o.type==='scalar'&&o.cmd===cmd) return o;
@@ -1068,7 +1082,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     out+='</g>';
     // Paper boundary (dashed) — always drawn (the SVG clips it). Never hidden when content overfills.
     const bx0=tx(-EX), bx1=tx(EX), by0=ty(-EY), by1=ty(EY);
-    out+='<rect x="'+bx0.toFixed(1)+'" y="'+by0.toFixed(1)+'" width="'+(bx1-bx0).toFixed(1)+'" height="'+(by1-by0).toFixed(1)+'" fill="none" stroke="#bbb" stroke-dasharray="4 4"/>';
+    out+='<rect x="'+Math.min(bx0,bx1).toFixed(1)+'" y="'+Math.min(by0,by1).toFixed(1)+'" width="'+Math.abs(bx1-bx0).toFixed(1)+'" height="'+Math.abs(by1-by0).toFixed(1)+'" fill="none" stroke="#bbb" stroke-dasharray="4 4"/>';
     // X / Y axes through the paper origin (0,0), always drawn (SVG clips them).
     // Expresii convention (v0.8): +X right (red), +Y up (blue).
     {
@@ -1206,8 +1220,22 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     return 'stroke';
   }
   function openFile(file){ const r=new FileReader();
-    r.onload=()=>{ doc.tree=parseXST(r.result).tree; currentName=file.name; addRecent(file.name, r.result);
-      selSet.clear(); selected=-1;cursorFrame=-1; view.panX=0; view.panY=0; history.length=0;future.length=0; updateUndo(); afterChange(); zoomToFit(); msg('Loaded '+file.name); };
+    r.onload=()=>{
+      const text=r.result;
+      const version=parseXstVersion(text);
+      doc.tree=parseXST(text).tree;
+      if(isLegacyVersion(version)){
+        // Legacy (+Y down) file: flip every stroke's Y so it displays correctly in the +Y-up view.
+        // Mark mutated frames changed so they re-emit with the new Y (untouched lines still round-trip).
+        for(const st of doc.tree.strokes){
+          for(const f of st.frames){ if(f.y!=null){ f.y=-f.y; f.changed=true; } }
+          if(st.cps) for(const p of st.cps){ if(p.y!=null){ p.y=-p.y; p.changed=true; } }
+        }
+      }
+      currentName=file.name; addRecent(file.name, text);
+      selSet.clear(); selected=-1; cursorFrame=-1; view.panX=0; view.panY=0; history.length=0; future.length=0; updateUndo(); afterChange(); zoomToFit();
+      msg('Loaded '+file.name+(isLegacyVersion(version)?' (legacy v'+(version?version.major+'.'+version.minor:'?')+' → flipped to +Y up)':''));
+    };
     r.readAsText(file); }
 
   // True round-trip of the CURRENT (edited) document.
@@ -1494,7 +1522,9 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     if(selSet.size < 1) return '';
     const bounds = computeSelectionBounds();
     if(!bounds) return '';
-    const {x0, y0, x1, y1} = bounds;
+    let {x0, y0, x1, y1} = bounds;
+    if(x1 < x0){ const t=x0; x0=x1; x1=t; }
+    if(y1 < y0){ const t=y0; y0=y1; y1=t; }
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const w = x1 - x0, h = y1 - y0;
     // Node Tool: show only a plain marquee around the selection — no transform handles
