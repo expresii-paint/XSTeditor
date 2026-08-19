@@ -177,8 +177,12 @@
     <div id="recentMenu" class="menu" hidden></div>
   </div>
   <button id="saveBtn">Save (download)</button>
-  <button id="undoBtn" title="Ctrl+Z">Undo</button>
-  <button id="redoBtn" title="Ctrl+Y">Redo</button>
+  <button id="undoBtn" title="Undo — revert the last change (Ctrl+Z)">
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4 L2 8 L6 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8 H10 a4 4 0 0 1 4 4 V12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <button id="redoBtn" title="Redo — re-apply the last undone change (Ctrl+Y)">
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M10 4 L14 8 L10 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 8 H6 a4 4 0 0 0 -4 4 V12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
   <span class="sep"></span>
   <div class="tool-group" role="toolbar" aria-label="Tools">
     <button id="selToolBtn" class="tool-btn active" title="Selector Tool — select &amp; transform strokes (drag corner/midpoint handles)">
