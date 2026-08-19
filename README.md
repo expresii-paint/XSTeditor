@@ -11,11 +11,11 @@ params, and a selected stroke](assets/xst-editor-screenshot.png)
 ## What it does
 
 - **Open** a `.xst` file (drag-drop, the Open button, or the Recent menu).
-- **Preview** the strokes on a paper-coordinate canvas (Expresii convention: +X right,
-  +Y down) that fills the whole window, with grid, a dashed −5..+5 world-coordinate paper
-  box, labelled axes (red X: −EX · 0 · +EX, blue Y: +EY · 0 · −EY, +Y down), and zoom-to-fit.
+- **Preview** the strokes on a paper-coordinate canvas (Expresii v0.8 convention: +X right,
+  +Y **up**) that fills the whole window, with grid, a dashed −5..+5 world-coordinate paper
+  box, labelled axes (red X: −EX · 0 · +EX, blue Y: +EY · 0 · −EY, +Y up), and zoom-to-fit.
   The paper box and axes are always drawn (clipped by the canvas) even when stroke content
-  extends past the ±5 paper edges.
+  extends past the ±5 paper edges. Saved files are stamped `v 0.8`.
 - **Select** strokes:
   - click a stroke to select it,
   - Shift/Ctrl/Cmd-click to toggle multiple,

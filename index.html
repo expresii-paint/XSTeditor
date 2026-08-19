@@ -350,7 +350,7 @@
 
 <script>
 /* ===================== PURE MODEL: parse / build-tree / emit (no DOM) ===================== */
-const SCALAR_CMDS = ['T','w','C','B','e','k','i'];
+const SCALAR_CMDS = ['T','w','C','B','e','k','i','v'];  // 'v' = XST format version (Expresii v0.8: +Y up)
 
 function formatNum(v){
   if(!isFinite(v)) return '0';
@@ -472,7 +472,14 @@ function flatten(tree){
   return out;
 }
 function parseXST(text){ return {tree: buildTree(text.split('\n').map(parseLine))}; }
-function emitXST(doc){ return flatten(doc.tree).map(emitLine).join('\n'); }
+// Expresii XST file version. v0.8 flipped the Y axis: +Y is now UP (like most apps).
+// We stamp 'v 0.8' into the prelude on every emit so saved files declare the convention.
+function ensureVersion(tree){
+  let v=findScalar(tree,'v');
+  if(!v){ v={type:'scalar',cmd:'v',value:0.8,changed:true}; tree.prelude.unshift(v); }
+  else v.value=0.8;
+}
+function emitXST(doc){ ensureVersion(doc.tree); return flatten(doc.tree).map(emitLine).join('\n'); }
 
 function findScalar(tree,cmd){
   for(const o of tree.prelude) if(o.type==='scalar'&&o.cmd===cmd) return o;
@@ -676,9 +683,9 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     const pad=6;
     const s=Math.min((W-2*pad)/((maxX-minX)||1),(H-2*pad)/((maxY-minY)||1));
     const cx=(minX+maxX)/2, cy=(minY+maxY)/2, mx=W/2, my=H/2;
-    // Match the main preview: Expresii +Y = down (no flip), so a stroke reads the
+    // Match the main preview: Expresii v0.8 uses +Y = up, so a stroke reads the
     // same way in its thumbnail as on the whole-paper preview.
-    const tx=x=>mx+(x-cx)*s, ty=y=>my+(y-cy)*s;
+    const tx=x=>mx+(x-cx)*s, ty=y=>my-(y-cy)*s;
     ctx.lineWidth=1.2; ctx.lineJoin='round'; ctx.lineCap='round';
     for(let i=0;i<fr.length-1;i++){
       const a=fr[i], b=fr[i+1];
@@ -1035,7 +1042,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     previewScale=s; previewFlipY=view.flipY;
     // Cache the mapping so marquee hit-testing can convert data<->screen without re-deriving it.
     pv={minX,maxX,minY,maxY,scale:s,flip:view.flipY,pad,W,H,panX:view.panX,panY:view.panY};
-    const tx=x=>pad+(x-minX)*s+view.panX, ty=y=>pad+(view.flipY?(maxY-y)*s:(y-minY)*s)+view.panY;
+    // Expresii v0.8: +Y is UP. flipY (rarely toggled) flips back to downward.
+    const tx=x=>pad+(x-minX)*s+view.panX, ty=y=>pad+(view.flipY?(y-minY)*s:(maxY-y)*s)+view.panY;
     // Paper coordinate system: Expresii canvas units are -extent..+extent.
     // Y half-extent is fixed at 5; X half-extent scales with the paper's aspect ratio.
     const PAPER_E=5;
@@ -1062,7 +1070,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     const bx0=tx(-EX), bx1=tx(EX), by0=ty(-EY), by1=ty(EY);
     out+='<rect x="'+bx0.toFixed(1)+'" y="'+by0.toFixed(1)+'" width="'+(bx1-bx0).toFixed(1)+'" height="'+(by1-by0).toFixed(1)+'" fill="none" stroke="#bbb" stroke-dasharray="4 4"/>';
     // X / Y axes through the paper origin (0,0), always drawn (SVG clips them).
-    // Expresii convention: +X right (red), +Y down (blue).
+    // Expresii convention (v0.8): +X right (red), +Y up (blue).
     {
       const ox=tx(0), oy=ty(0);
       const fmt=v=>(Math.round(v*1e4)/1e4).toString();
@@ -1084,7 +1092,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by0+12).toFixed(1)+'" fill="#36c">'+fmt(EY)+'</text>';
       out+='<text x="'+(zeroX+5).toFixed(1)+'" y="'+(zeroY+4).toFixed(1)+'" fill="#36c">0</text>';
       out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by1-3).toFixed(1)+'" fill="#36c">'+fmt(-EY)+'</text>';
-      out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by1+14).toFixed(1)+'" fill="#36c">+Y (down)</text>';
+      out+='<text x="'+(ox+5).toFixed(1)+'" y="'+(by1+14).toFixed(1)+'" fill="#36c">+Y (up)</text>';
       out+='</g>';
     }
     const wmax=view.weight;
@@ -1412,8 +1420,9 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     if(!pv) return {x, y};
     const dx = pv.minX + (x - pv.pad - pv.panX) / pv.scale;
     let dy;
-    if(pv.flip) dy = pv.maxY - (y - pv.pad - pv.panY) / pv.scale;
-    else dy = pv.minY + (y - pv.pad - pv.panY) / pv.scale;
+    // Inverse of the v0.8 display mapping: flip=false (default) => +Y up => dy = maxY - (Y-pad)/s.
+    if(pv.flip) dy = pv.minY + (y - pv.pad - pv.panY) / pv.scale;
+    else dy = pv.maxY - (y - pv.pad - pv.panY) / pv.scale;
     return {x: dx, y: dy};
   }
   // Screen-space (820x820) bounding box of a stroke's nodes, using the cached preview mapping.
@@ -1422,7 +1431,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     let a=1e9,b=-1e9,c=1e9,d=-1e9;
     for(const f of doc.tree.strokes[si].frames){
       const X=pv.pad+(f.x-pv.minX)*pv.scale+pv.panX;
-      const Y=pv.flip ? (pv.pad+(pv.maxY-f.y)*pv.scale+pv.panY) : (pv.pad+(f.y-pv.minY)*pv.scale+pv.panY);
+      const Y=pv.flip ? (pv.pad+(f.y-pv.minY)*pv.scale+pv.panY) : (pv.pad+(pv.maxY-f.y)*pv.scale+pv.panY);
       if(X<a)a=X; if(X>b)b=X; if(Y<c)c=Y; if(Y>d)d=Y;
     }
     return {x0:a,y0:c,x1:b,y1:d};
@@ -1437,7 +1446,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     if(!pv) return false;
     const s = doc.tree.strokes[si];
     const fx = f => pv.pad + (f.x - pv.minX) * pv.scale + pv.panX;
-    const fy = f => pv.flip ? (pv.pad + (pv.maxY - f.y) * pv.scale + pv.panY) : (pv.pad + (f.y - pv.minY) * pv.scale + pv.panY);
+    const fy = f => pv.flip ? (pv.pad + (f.y - pv.minY) * pv.scale + pv.panY) : (pv.pad + (pv.maxY - f.y) * pv.scale + pv.panY);
     const inside = (x,y) => x >= m.x0 && x <= m.x1 && y >= m.y0 && y <= m.y1;
     const fr = s.frames;
     // A single-node stroke: hit if that point is inside the marquee.
@@ -1470,7 +1479,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       const st = doc.tree.strokes[si];
       for(const f of st.frames){
         const X = pv.pad + (f.x - pv.minX) * pv.scale + pv.panX;
-        const Y = pv.flip ? (pv.pad + (pv.maxY - f.y) * pv.scale + pv.panY) : (pv.pad + (f.y - pv.minY) * pv.scale + pv.panY);
+        const Y = pv.flip ? (pv.pad + (f.y - pv.minY) * pv.scale + pv.panY) : (pv.pad + (pv.maxY - f.y) * pv.scale + pv.panY);
         if(X < minX) minX = X;
         if(X > maxX) maxX = X;
         if(Y < minY) minY = Y;
@@ -1636,7 +1645,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
           // Remember where the cursor was in DATA space at grab-time, so the whole group moves by
           // (cursorNow - cursorStart) — preserving the exact grab offset (no initial jump).
           const sb=toSvg(e.clientX,e.clientY); const S0=previewScale*view.zoom;
-          const startData={ x: pv.minX + (sb.x - pv.pad - pv.panX)/S0, y: pv.flip ? pv.maxY - (sb.y - pv.pad - pv.panY)/S0 : pv.minY + (sb.y - pv.pad - pv.panY)/S0 };
+          const startData={ x: pv.minX + (sb.x - pv.pad - pv.panX)/S0, y: pv.flip ? pv.minY + (sb.y - pv.pad - pv.panY)/S0 : pv.maxY - (sb.y - pv.pad - pv.panY)/S0 };
           nodeDrag={si:selected, fi, moved:false, startX:e.clientX, startY:e.clientY, origPos, startData};
           svgEl.style.cursor='grabbing';
           e.stopPropagation(); e.preventDefault();
@@ -1822,7 +1831,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       const cur=toSvg(e.clientX,e.clientY);
       const g=pv; // current cached mapping (refreshed by the last render)
       const nx = g.minX + (cur.x - g.pad - g.panX)/S;
-      const ny = g.flip ? g.maxY - (cur.y - g.pad - g.panY)/S : g.minY + (cur.y - g.pad - g.panY)/S;
+      const ny = g.flip ? g.minY + (cur.y - g.pad - g.panY)/S : g.maxY - (cur.y - g.pad - g.panY)/S;
       const dxd=nx-nodeDrag.startData.x, dyd=ny-nodeDrag.startData.y;
       const pts = splineMode ? s.cps : s.frames;
       for(const o of nodeDrag.origPos){ const f=pts[o.fi]; if(f){ f.x=o.x+dxd; f.y=o.y+dyd; f.changed=true; } }
@@ -1840,7 +1849,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       // Move ALL selected strokes by the same data-space delta (respecting Y flip).
       const dx=(e.clientX-lastX)/previewScale, dy=(e.clientY-lastY)/previewScale;
       lastX=e.clientX; lastY=e.clientY;
-      for(const si of selSet){ const s=doc.tree.strokes[si]; for(const f of s.frames){ f.x+=dx; f.y+=previewFlipY? -dy : dy; f.changed=true; } }
+      // +Y up (default, previewFlipY=false): a downward screen drag decreases data Y, so apply -dy.
+      for(const si of selSet){ const s=doc.tree.strokes[si]; for(const f of s.frames){ f.x+=dx; f.y+=previewFlipY? dy : -dy; f.changed=true; } }
       renderPreview();
     } else if(dragMode==='marquee'){
       const r=svgEl.getBoundingClientRect();
@@ -2030,15 +2040,15 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     for(let i=0;i<=N;i++){
       const t=i/N;                       // 0..1 along the stroke
       const x=-0.40 + 0.80*t;
-      // slight vertical bow: dips in the middle (calligraphic belly)
-      const y=-0.02 - 0.10*Math.sin(Math.PI*t);
+      // slight vertical bow: rises in the middle (calligraphic belly) — +Y up in v0.8
+      const y=-0.02 + 0.10*Math.sin(Math.PI*t);
       const z=0.02*Math.sin(2*Math.PI*t);
       // tapered pressure: 0 at ends, ~1 in the middle (brush-down at i=0, brush-up at i=N)
       const p=Math.sin(Math.PI*t);       // 0 at t=0/1, peaks 1 at center
       const pressure=Math.max(0, Math.round(p*10)/10);
       lines.push("s "+x.toFixed(5)+" "+y.toFixed(5)+" "+z.toFixed(5)+" 0 0 0 "+pressure.toFixed(1));
     }
-    lines.push("s 0.40 -0.02 0.00000 0 0 0 0"); // explicit trailing brush-up
+    lines.push("s 0.40 0.08 0.00000 0 0 0 0"); // explicit trailing brush-up (y up = +0.08)
     return lines.join("\n")+"\n";
   }
 
