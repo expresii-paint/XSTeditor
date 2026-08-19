@@ -1193,11 +1193,31 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     saveRecents(list); renderRecentsMenu();
   }
   function removeRecent(name){ saveRecents(loadRecents().filter(r=>r.name!==name)); renderRecentsMenu(); }
+  // Shared loader: parse + apply version-aware flip + reset selection/zoom/history + render.
+  // Used by both the Open button and the Recent menu so they behave identically.
+  function loadText(text, name){
+    const version=parseXstVersion(text);
+    doc.tree=parseXST(text).tree;
+    if(isLegacyVersion(version)){
+      // Legacy (+Y down) file: flip every stroke's Y so it displays correctly in the +Y-up view.
+      // Mark mutated frames changed so they re-emit with the new Y (untouched lines still round-trip).
+      for(const st of doc.tree.strokes){
+        for(const f of st.frames){ if(f.y!=null){ f.y=-f.y; f.changed=true; } }
+        if(st.cps) for(const p of st.cps){ if(p.y!=null){ p.y=-p.y; p.changed=true; } }
+      }
+    }
+    currentName=name;
+    selSet.clear(); selected=-1; cursorFrame=-1; view.panX=0; view.panY=0; history.length=0; future.length=0; updateUndo(); afterChange(); zoomToFit();
+    msg('Loaded '+name+(isLegacyVersion(version)?' (legacy v'+(version?version.major+'.'+version.minor:'?')+' → flipped to +Y up)':''));
+  }
   function openRecent(name){
     const r=loadRecents().find(x=>x.name===name);
     if(!r){ msg('Recent file missing'); return; }
-    doc.tree=parseXST(r.text).tree; selSet.clear(); selected=-1; cursorFrame=-1; view.panX=0; view.panY=0;
-    history.length=0; future.length=0; updateUndo(); afterChange(); zoomToFit(); msg('Opened '+(currentName=r.name));
+    if(!r.text){ msg('Recent entry has no saved content: '+name); return; }
+    try{ loadText(r.text, r.name); }
+    catch(e){ msg('Failed to open recent: '+name+' :: '+(e&&e.message?e.message:e)); return; }
+    addRecent(r.name, r.text);  // bring the opened entry to the top
+    $('recentMenu').hidden=true;
   }
   function renderRecentsMenu(){
     const menu=$('recentMenu'); const list=loadRecents();
@@ -1221,20 +1241,9 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   }
   function openFile(file){ const r=new FileReader();
     r.onload=()=>{
-      const text=r.result;
-      const version=parseXstVersion(text);
-      doc.tree=parseXST(text).tree;
-      if(isLegacyVersion(version)){
-        // Legacy (+Y down) file: flip every stroke's Y so it displays correctly in the +Y-up view.
-        // Mark mutated frames changed so they re-emit with the new Y (untouched lines still round-trip).
-        for(const st of doc.tree.strokes){
-          for(const f of st.frames){ if(f.y!=null){ f.y=-f.y; f.changed=true; } }
-          if(st.cps) for(const p of st.cps){ if(p.y!=null){ p.y=-p.y; p.changed=true; } }
-        }
-      }
-      currentName=file.name; addRecent(file.name, text);
-      selSet.clear(); selected=-1; cursorFrame=-1; view.panX=0; view.panY=0; history.length=0; future.length=0; updateUndo(); afterChange(); zoomToFit();
-      msg('Loaded '+file.name+(isLegacyVersion(version)?' (legacy v'+(version?version.major+'.'+version.minor:'?')+' → flipped to +Y up)':''));
+      try{ loadText(r.result, file.name); }
+      catch(e){ msg('Failed to open '+file.name); return; }
+      addRecent(file.name, r.result);
     };
     r.readAsText(file); }
 
