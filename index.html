@@ -31,6 +31,9 @@
   button.primary{background:var(--accent);color:#06203f;border-color:var(--accent);font-weight:600}
   button.danger:hover{border-color:var(--bad);color:var(--bad)}
   button:disabled{opacity:.4;cursor:not-allowed}
+  .split-btn{display:inline-flex}
+  .split-btn>button{border-radius:6px 0 0 6px;margin:0}
+  .split-btn>button.caret{border-radius:0 6px 6px 0;border-left:none;padding:5px 8px}\
   .pill{background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--dim)}
   /* recent dropdown */
   .dropdown{position:relative}
@@ -176,7 +179,10 @@
     <button id="recentBtn">Recent ▾</button>
     <div id="recentMenu" class="menu" hidden></div>
   </div>
-  <button id="saveBtn">Save (download)</button>
+  <div class="split-btn">
+    <button id="saveBtn">Save</button>
+    <button id="saveAsBtn" class="caret" title="Save As… (choose a different name/location)" aria-label="Save As">▾</button>
+  </div>
   <button id="undoBtn" title="Undo — revert the last change (Ctrl+Z)">
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4 L2 8 L6 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8 H10 a4 4 0 0 1 4 4 V12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
@@ -1239,6 +1245,7 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
 
   /* ---------- file io ---------- */
   let currentName='untitled';
+  let openedHandle=null;   // FileSystemFileHandle of the file opened via the file picker (Chromium), enables true overwrite-Save
   function defaultSaveName(){
     if(currentName && currentName!=='untitled') return currentName.replace(/\.xst$/i,'');
     const t=findTitle(doc.tree);
@@ -1249,6 +1256,8 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     r.onload=()=>{
       try{ loadText(r.result, file.name); }
       catch(e){ msg('Failed to open '+file.name); return; }
+      // Keep the file handle (Chromium) so a later Save can overwrite the same file.
+      openedHandle = (file instanceof File && 'getAsFileSystemHandle' in file && file.webkitGetAsEntry) ? file : (file.handle || file.getAsFileSystemHandle ? file : null);
       addRecent(file.name, r.result);
     };
     r.readAsText(file); }
@@ -1313,11 +1322,34 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
     }
   }
   function saveFile(){ openSaveDialog(); }
+  // Save (overwrite): if the document was opened from a real file handle (Chromium) and still
+  // has permission, write straight back to that path — a true overwrite at the same name/location.
+  // Otherwise (no handle, WebKit, or user hit Save As) open the Save-As dialog.
+  async function saveOverwrite(){
+    if(doc.tree.strokes.length===0){ msg('Nothing to save (no strokes)'); return; }
+    if(openedHandle && typeof openedHandle.createWritable==='function'){
+      try{
+        const ok = (typeof openedHandle.queryPermission==='function') ? await openedHandle.queryPermission({mode:'readwrite'}) : 'granted';
+        if(ok==='granted'){
+          const writable=await openedHandle.createWritable();
+          syncSplineFrames();
+          await writable.write(currentXSTText());
+          await writable.close();
+          updateStat();
+          if(openedHandle.kind!=='directory') currentName=openedHandle.name;
+          msg('Saved '+currentName);
+          return;
+        }
+      }catch(err){ /* fall back to Save-As below */ }
+    }
+    openSaveDialog();
+  }
 
   /* ---------- wire up ---------- */
   $('openBtn').onclick=()=>$('fileInput').click();
   $('fileInput').onchange=e=>{ if(e.target.files[0]) openFile(e.target.files[0]); e.target.value=''; };
-  $('saveBtn').onclick=saveFile;
+  $('saveBtn').onclick=saveOverwrite;
+  $('saveAsBtn').onclick=openSaveDialog;
   // Recent dropdown
   $('recentBtn').onclick=e=>{ e.stopPropagation(); toggleRecentMenu(); };
   $('recentMenu').addEventListener('click', e=>{
@@ -1332,7 +1364,6 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
   document.addEventListener('click', e=>{ if(!e.target.closest('.dropdown')){ $('recentMenu').hidden=true; $('newMenu').hidden=true; } });
   $('undoBtn').onclick=undo; $('redoBtn').onclick=redo;
   // Save dialog wiring
-  $('saveBtn').onclick=saveFile;
   $('saveCancel').onclick=closeSaveDialog;
   $('saveDownload').onclick=saveDownload;
   $('saveNative').onclick=saveNative;
