@@ -211,7 +211,7 @@
   <!-- MAIN: preview (canvas) -->
   <div class="col" id="previewWrap" style="overflow:hidden;display:flex;flex-direction:column">
     <div id="previewBar">
-      <button id="zoomFit" title="Zoom to fit">Zoom to fit</button>
+      <button id="zoomFit" title="Zoom to fit (Home)">Zoom to fit</button>
       <span class="range">Zoom <input id="zoom" type="range" min="0.2" max="40" step="0.1" value="1" style="width:120px"> <b id="zoomVal" style="min-width:42px;display:inline-block;text-align:right">1.0×</b></span>
       <label><input id="showFrames" type="checkbox"> Frame dots</label>       <label><input id="splineMode" type="checkbox"> Spline</label>       <label title="Control points per 100 units (resample density)">CP/100 <input id="splineDensity" type="number" min="4" max="60" step="1" value="14" style="width:52px"></label>
       <label><input id="colorStroke" type="radio" name="cmode" value="stroke" checked> Color by stroke</label>
@@ -2064,6 +2064,11 @@ if(typeof document!=='undefined' && document.getElementById('svg')){
       // Toggle between the two exclusive tools (Selector <-> Node).
       const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
       e.preventDefault(); setTool(tool==='node' ? 'selector' : 'node');
+    }
+    else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&e.key==='Home'){
+      // 'Home' performs Zoom to fit (same as the Zoom to fit button).
+      const t=e.target; if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
+      e.preventDefault(); zoomToFit();
     }
     else if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==='Delete'||e.key==='Del'||e.key==='Backspace')){
       // 'Del' deletes the currently selected node (Node Tool) or the selected stroke group(s)
