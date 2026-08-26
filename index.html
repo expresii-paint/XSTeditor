@@ -436,12 +436,24 @@ function buildTree(lines){
   let cur=null;                 // current stroke being built
   let activeLayer=0;            // current layer (set by 'L <n>' commands; 0 = topmost)
   const pendingConfig=[];       // brush-config lines seen in a gap, attach to NEXT stroke
+  let pendingW=null, pendingI=null;   // 'w'/'i' lines held to attach to the NEXT s-frame of the current stroke
   const finalize=()=>{ if(cur){ tree.strokes.push(cur); cur=null; } };
+  const attachPending=(o)=>{           // hang held w/i onto the s-frame object o (emitted just before it)
+    if(pendingW===null && pendingI===null) return;
+    if(!o.attrs) o.attrs=[];
+    if(pendingW!==null) o.attrs.push(pendingW);
+    if(pendingI!==null) o.attrs.push(pendingI);
+    pendingW=null; pendingI=null;
+  };
+  const attachPendingToLast=()=>{      // when a stroke ends while w/i are still held, bind them to its last frame
+    if((pendingW!==null||pendingI!==null) && cur && cur.frames.length) attachPending(cur.frames[cur.frames.length-1]);
+  };
 
   for(let i=0;i<lines.length;i++){
     const o=lines[i];
     if(o.type==='layer'){
       // Layer switch: affects all strokes that follow (until the next switch).
+      attachPendingToLast();
       activeLayer=o.layer;
       if(cur) finalize();
       if(phase==='prelude') tree.prelude.push(o);
@@ -449,6 +461,13 @@ function buildTree(lines){
       continue;
     }
     if(o.type!=='stroke'){
+      // 'w'/'i' between s-frames are per-frame brush attributes of the SAME stroke — hold them;
+      // do NOT split the stroke. Every other non-stroke line ends the current stroke.
+      if(o.type==='scalar' && (o.cmd==='w'||o.cmd==='i')){
+        if(o.cmd==='w') pendingW=o; else pendingI=o;
+        continue;
+      }
+      attachPendingToLast();
       if(cur) finalize();
       if(phase==='prelude') tree.prelude.push(o);
       else pendingConfig.push(o);
@@ -468,9 +487,11 @@ function buildTree(lines){
     } else if(!cur){
       cur={config:pendingConfig.splice(0), frames:[], hasPress:false, layer:activeLayer};
     }
+    attachPending(o);
     cur.frames.push(o);
     if(o.pressure>0) cur.hasPress=true;
   }
+  attachPendingToLast();
   finalize();
   if(pendingConfig.length) tree.trailing.push(...pendingConfig);
   return tree;
@@ -479,7 +500,10 @@ function buildTree(lines){
 function flatten(tree){
   const out=[];
   for(const o of tree.prelude) out.push(o);
-  for(const st of tree.strokes){ for(const o of st.config) out.push(o); for(const o of st.frames) out.push(o); }
+  for(const st of tree.strokes){
+    for(const o of st.config) out.push(o);
+    for(const o of st.frames){ if(o.attrs) for(const a of o.attrs) out.push(a); out.push(o); }
+  }
   for(const o of tree.trailing) out.push(o);
   return out;
 }
