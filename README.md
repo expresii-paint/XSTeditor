@@ -128,4 +128,4 @@ enable its Web API.
 
 ## License
 
-See the repository for license terms.
+[MIT](LICENSE) — see the LICENSE file for the full text.
